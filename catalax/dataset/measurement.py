@@ -1,6 +1,6 @@
 import json
 import warnings
-from typing import Dict, Optional, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 import jax
@@ -13,9 +13,9 @@ import pyenzyme as pe
 from pydantic import (
     BaseModel,
     Field,
-    model_validator,
     field_serializer,
     field_validator,
+    model_validator,
 )
 from pydantic.config import ConfigDict
 from pydantic.fields import computed_field
@@ -196,7 +196,9 @@ class Measurement(BaseModel):
         if isinstance(data, np.ndarray) or isinstance(data, list):
             data = jnp.array(data)
 
-        assert data.shape[0] == self.time.shape[0], "The data and time arrays must have the same length."  # type: ignore
+        assert (
+            data.shape[0] == self.time.shape[0]
+        ), "The data and time arrays must have the same length."  # type: ignore
         self.data[species] = data
         self.initial_conditions[species] = initial_concentration
 
@@ -330,6 +332,7 @@ class Measurement(BaseModel):
         self,
         show=True,
         ax=None,
+        species_ids: Optional[List[str]] = None,
         model: Optional["Model"] = None,
     ):
         """Plot the measurement data.
@@ -354,6 +357,10 @@ class Measurement(BaseModel):
         for species in self.initial_conditions.keys():
             if self.data.get(species) is None or len(self.data[species]) == 0:
                 continue
+
+            if species_ids:
+                if species not in species_ids:
+                    continue
 
             color = next(color_iter)
 

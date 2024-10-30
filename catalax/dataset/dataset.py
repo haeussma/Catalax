@@ -493,6 +493,7 @@ class Dataset(BaseModel):
         show: bool = True,
         path: Optional[str] = None,
         measurement_ids: List[str] = [],
+        species_ids: List[str] = [],
         figsize: Tuple[int, int] = (5, 3),
         model: "Model" = None,
     ):
@@ -535,7 +536,7 @@ class Dataset(BaseModel):
             if meas.id not in measurement_ids:
                 continue
 
-            meas.plot(ax=axs[index], model=model)
+            meas.plot(ax=axs[index], model=model, species_ids=species_ids)
 
             index += 1
 
