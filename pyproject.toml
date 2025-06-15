@@ -23,7 +23,6 @@ ipywidgets = "^8.1.1"
 optax = "^0.2.3"
 diffrax = "^0.6.0"
 pydantic = "^2.9.2"
-equinox = "^0.11.7"
 rich = "^13.8.1"
 mlcroissant = "^1.0.10"
 pyenzyme = { git = "https://github.com/EnzymeML/PyEnzyme.git", rev = "v2-migration" }
