@@ -159,6 +159,46 @@ class Dataset(BaseModel):
                 initial_conditions,  # type: ignore
             )
 
+    def pad_data(self, species_order: List[str]) -> Dataset:
+        new_dataset = deepcopy(self)
+
+        # build length map keyed by meas.id
+        length_map = {}
+        for meas in new_dataset.measurements:
+            length_map[meas.id] = {sid: len(arr) for sid, arr in meas.data.items()}
+
+        # global max length
+        max_len = max(max(sizes.values()) for sizes in length_map.values())
+
+        # pad every species in species_order to the max length
+        for meas in new_dataset.measurements:
+            for sid in species_order:
+                if sid not in meas.data:
+                    meas.data[sid] = []  # will get padded to all NaNs
+            # pad each one in place
+            for sid, arr in meas.data.items():
+                arr = np.array(arr, float)
+                pad = max_len - arr.shape[0]
+                if pad > 0:
+                    arr = np.pad(arr, (0, pad), constant_values=np.nan)
+                meas.data[sid] = arr.tolist()
+
+        return new_dataset
+
+    def get_nan_mask(self, species_order: List[str]) -> Array:
+        """Returns a boolean mask of the dataset where True indicates valid data and False indicates NaN values.
+
+        Args:
+            species_order (List[str]): The order of the species in the array.
+
+        Returns:
+            Array: Boolean mask where True = valid data, False = NaN values
+        """
+
+        array, _, _ = self.to_jax_arrays(species_order=species_order)
+        mask = ~jnp.isnan(array)  # True where data is valid, False where NaN
+        return mask
+
     def to_y0_matrix(self, species_order: List[str]) -> Array:
         """Assembles the initial conditions of the dataset into a dictionary.
 
@@ -248,7 +288,9 @@ class Dataset(BaseModel):
             if any(sp.data is not None and len(sp.data) > 0 for sp in meas.species_data)
         ]
 
-        all_species = list(set(sp for meas in measurements for sp in meas.data.keys()))
+        all_species = list(
+            set(sp for meas in measurements for sp in meas.initial_conditions.keys())
+        )
 
         return cls(
             id=enzmldoc.name,
