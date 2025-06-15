@@ -28,6 +28,7 @@ def run_mcmc(
     seed: int = 420,
     verbose: int = 1,
     max_steps: int = 64**4,
+    mask: Optional[Array] = None,
 ):
     """Runs an MCMC simulation to infer the posterior distribution of parameters.
 
@@ -44,15 +45,15 @@ def run_mcmc(
         yerrs (Array, float): The standard deviation of the observed data.
         num_warmup (int): Number of warmup steps.
         num_samples (int): Number of samples.
+        neuralode (Optional[NeuralBase]): Neural ODE model to use for rate prediction.
         dense_mass (bool, optional): Whether to use a dense mass matrix or not. Defaults to True.
         dt0 (float, optional): Resolution of the simulation. Defaults to 0.1.
         chain_method (str, optional): Choose from 'vectorized', 'parallel' or 'sequential'. Defaults to "sequential".
         num_chains (int, optional): Number of chains. Defaults to 1.
-        seed (int, optional): Random number seed to reproduce results. Defaults to 0.
-        progress_bar (bool, optional): Whether to show a progress bar or not. Defaults to True.
-
-    Returns:
-        MCMC: Result of the MCMC simulation.
+        seed (int, optional): Random number seed to reproduce results. Defaults to 420.
+        verbose (int, optional): Whether to show progress and summary. Defaults to 1.
+        max_steps (int, optional): Maximum number of steps for the solver. Defaults to 64**4.
+        mask (Optional[Array], optional): Boolean mask array indicating which data points to use. Defaults to None.
     """
 
     # Check if all paramaters have priors
@@ -111,12 +112,64 @@ def run_mcmc(
     else:
         sim_func = model._sim_func
 
+    # Handle NaN values and validate mask
+    if mask is not None:
+        if verbose:
+            print(f"Mask shape: {mask.shape}")
+            print(f"Data shape: {data.shape}")
+            print(f"Mask dtype: {mask.dtype}")
+            print(f"Number of masked points: {(~mask).sum()}")
+            print(f"Number of valid points: {mask.sum()}")
+            print(f"Number of NaN values in data: {jnp.isnan(data).sum()}")
+
+        # Check if mask shape matches data shape
+        if mask.shape != data.shape:
+            raise ValueError(
+                f"Mask shape {mask.shape} does not match data shape {data.shape}"
+            )
+
+        # Check if mask is boolean
+        if mask.dtype != bool:
+            raise ValueError(f"Mask must be boolean, got {mask.dtype}")
+
+        # Check if there are any valid points left
+        if mask.sum() == 0:
+            raise ValueError(
+                "Mask excludes all data points. At least some data points must be valid."
+            )
+
+        # Replace NaN values with zeros where mask is False (masked out)
+        # This prevents NaN from causing issues during model initialization
+        data = jnp.where(mask, data, 0.0)
+
+        if verbose:
+            print(
+                f"After NaN replacement - NaN values in data: {jnp.isnan(data).sum()}"
+            )
+
+    # If no mask is provided but data contains NaN, create a mask automatically
+    elif jnp.isnan(data).any():
+        if verbose:
+            print(
+                f"No mask provided but data contains {jnp.isnan(data).sum()} NaN values"
+            )
+            print("Creating automatic mask to exclude NaN values")
+
+        # Create mask that excludes NaN values
+        mask = ~jnp.isnan(data)
+        # Replace NaN values with zeros
+        data = jnp.where(mask, data, 0.0)
+
+        if verbose:
+            print(f"Automatic mask created - Number of valid points: {mask.sum()}")
+
     # Setup the bayes model
     bayes_model = _setup_model(
         yerrs=yerrs,
         priors=priors,  # type: ignore
         sim_func=sim_func,  # type: ignore
         model=model,
+        mask=mask,
     )
 
     mcmc = MCMC(
@@ -153,10 +206,21 @@ def _setup_model(
     sim_func: Callable,
     priors: List[Tuple[str, dist.Distribution]],
     model: "Model",
+    mask: Optional[Array] = None,
 ):
     """Function to setup the model for the MCMC simulation.
 
     This is done, to not have to pass the priors and the simulation function to the MCMC.
+    If a mask is provided, masked data points will not be used to update the prior during inference.
+    The mask should be a boolean array with the same shape as the data, where True indicates
+    data points to use and False indicates points to mask out.
+
+    Args:
+        yerrs (Union[float, Array]): The standard deviation of the observed data.
+        sim_func (Callable): The simulation function of the model.
+        priors (List[Tuple[str, dist.Distribution]]): List of parameter priors.
+        model (Model): The model to fit.
+        mask (Optional[Array]): Boolean mask array indicating which data points to use.
     """
 
     # Set up the observables to extract from the simulation
@@ -179,12 +243,7 @@ def _setup_model(
         Args:
             data (Array): The data against which the model is fitted.
             y0s (Array): The initial conditions of the model.
-            yerrs (Array): The standard deviation of the observed data.
-            priors_loc (Array): The times at which the data is sampled.
-            prior_low_bounds (Array): The lower bounds of the priors.
-            prior_upper_bounds (Array): The upper bounds of the priors.
-            priors_scale (Array): The stdev of the priors.
-            sim_func (Callable): The simulation function of the model.
+            times (Array): The times at which the data is sampled.
         """
 
         theta = jnp.array(
@@ -193,9 +252,16 @@ def _setup_model(
 
         states = sim_func(y0s, theta, times)
 
-        sigma = numpyro.sample("sigma", dist.Normal(0, yerrs))  # type: ignore
+        sigma = numpyro.sample("sigma", dist.HalfNormal(yerrs))  # type: ignore
 
-        numpyro.sample("y", dist.Normal(states[..., observables], sigma), obs=data)  # type: ignore
+        # If mask is provided, use numpyro.handlers.mask to mask out data points
+        if mask is not None:
+            with numpyro.handlers.mask(mask=mask):
+                numpyro.sample(
+                    "y", dist.Normal(states[..., observables], sigma), obs=data
+                )  # type: ignore
+        else:
+            numpyro.sample("y", dist.Normal(states[..., observables], sigma), obs=data)  # type: ignore
 
     return _bayes_model
 
