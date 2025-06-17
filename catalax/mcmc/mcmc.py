@@ -1,15 +1,16 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Type, Union, Any
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Type, Union
 
 import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
+from diffrax import Dopri5
 from jax import Array
 from jax.random import PRNGKey
 from numpyro.infer import MCMC, NUTS
-from diffrax import Dopri5
 
 from catalax.dataset.dataset import Dataset
 from catalax.model.inaxes import InAxes
@@ -17,7 +18,6 @@ from catalax.surrogate import Surrogate
 
 if TYPE_CHECKING:
     from catalax.model.model import Model
-    from catalax.neural.neuralbase import NeuralBase
 
 
 @dataclass
@@ -84,7 +84,7 @@ def run_mcmc(
     _validate_parameter_priors(model)
 
     # Setup model and prepare data
-    model_setup = _setup_model_system(model, config)
+    _setup_model_system(model, config)
     data_prep = _prepare_mcmc_data(dataset, model, config, surrogate)
 
     # Create Bayesian model
@@ -118,6 +118,7 @@ class DataPreparation:
     y0s: Array
     constants: Array
     sim_func: Callable
+    mask: Array
 
 
 def _setup_model_system(model: Model, config: MCMCConfig) -> ModelSetup:
@@ -172,12 +173,16 @@ def _prepare_mcmc_data(
         times=times,
     )
 
+    # Get mask of valid data
+    mask = ~jnp.isnan(data)
+
     return DataPreparation(
         data=data,
         times=times,
         y0s=y0s,
         constants=constants,
         sim_func=sim_func,
+        mask=mask,
     )
 
 
@@ -226,6 +231,7 @@ def _run_mcmc_simulation(
         y0s=data_prep.y0s,
         times=data_prep.times,
         constants=data_prep.constants,
+        mask=data_prep.mask,
     )
 
     if config.verbose:
@@ -363,6 +369,7 @@ def _create_bayesian_model(
         constants: Array,
         times: Array,
         data: Optional[Array] = None,
+        mask: Optional[Array] = None,
     ):
         """Bayesian model for parameter posterior sampling.
 
@@ -374,7 +381,7 @@ def _create_bayesian_model(
             constants: System constants
             times: Time points for simulation
             data: Observed data to fit against
-
+            mask: Mask of valid data
         Returns:
             Sampled posterior distribution
         """
@@ -387,9 +394,14 @@ def _create_bayesian_model(
         states = sim_func(y0s, theta, constants, times)
 
         # Sample noise parameter
-        sigma = numpyro.sample("sigma", dist.Normal(0, yerrs))  # type: ignore
+        sigma = numpyro.sample("sigma", dist.Normal(loc=yerrs))
 
-        # Compare simulation to observed data
-        numpyro.sample("y", likelihood(states[..., observables], sigma), obs=data)
+        # Masked sampling to handle NaN values in data
+        with numpyro.handlers.mask(mask=mask):
+            numpyro.sample(
+                name="y",
+                fn=likelihood(loc=states[..., observables], scale=sigma),
+                obs=data,
+            )
 
     return _bayes_model
