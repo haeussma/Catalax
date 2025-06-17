@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from enum import Enum
 import os
 import tempfile
 import uuid
@@ -8,8 +7,9 @@ import warnings
 import zipfile
 from copy import deepcopy
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type, Union, Self
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Self, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -17,16 +17,15 @@ import matplotlib.pyplot as plt
 import mlcroissant as mlc
 import numpy as np
 import pandas as pd
-from jax import Array
-
 import pyenzyme as pe
+from jax import Array
 from pydantic import BaseModel, Field
 
 from catalax.predictor import Predictor
 
 if TYPE_CHECKING:
-    from catalax.model.simconfig import SimulationConfig
     from catalax.model.model import Model
+    from catalax.model.simconfig import SimulationConfig
 
 from .croissant import extract_record_set, json_lines_to_dict
 from .measurement import Measurement
@@ -161,6 +160,52 @@ class Dataset(BaseModel):
             species in the full species list
         """
         return [self.species.index(sp) for sp in self.get_observable_species_order()]
+
+    def pad_data(self, species_order: List[str]) -> "Dataset":
+        """
+        Pad each Measurement's data so that *every* species in `species_order`
+        exists and all series share the same length (filled with NaN).
+
+        Args:
+            species_order: ordered iterable of str
+                Species expected in each measurement, in the desired array order.
+
+        Returns:
+            The padded dataset.
+        """
+        # TODO check jax
+        ds = deepcopy(self)
+        required = set(species_order)
+
+        # Get max shape of the data
+        max_len = 0
+        for meas in ds.measurements:
+            keys = set(meas.initial_conditions.keys())
+            missing = required - keys
+            if missing:
+                raise ValueError(
+                    f"Measurement {meas.id} missing definition of initial condition for species: {sorted(missing)}"
+                )
+
+            max_len = max(max_len, *(len(arr) for arr in meas.data.values()))
+
+        # Pad missing measurement data with NaNs
+        for meas in ds.measurements:
+            for sid in species_order:
+                try:
+                    arr = np.asarray(meas.data[sid], dtype=float)
+                except KeyError:
+                    arr = np.full(max_len, np.nan)
+                    meas.data[sid] = arr.tolist()
+                    continue
+
+                if arr.size < max_len:
+                    pad_len = max_len - arr.size
+                    arr = np.concatenate((arr, np.full(pad_len, np.nan)))
+
+                meas.data[sid] = arr.tolist()
+
+        return ds
 
     # =====================
     # Data Addition Methods
