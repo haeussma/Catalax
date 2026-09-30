@@ -594,7 +594,7 @@ class Model(CatalaxBase, Predictor, Surrogate):
             config = dataset.to_config(nsteps=n_steps)
         if use_times:
             config.nsteps = None
-            _, times, _ = dataset.to_jax_arrays(self.get_state_order())
+            times = dataset.to_time_matrix()
         else:
             times = None
 
@@ -965,22 +965,21 @@ class Model(CatalaxBase, Predictor, Surrogate):
         ...
 
     def get_observable_state_order(self, as_indices: bool = False) -> List[str | int]:  # type: ignore
-        """Returns the order of the observable states in the model"""
-        observable_states = []
+        """Returns the order of the observable states in the model.
 
-        for i, state in enumerate(self.states.keys()):
-            if state not in self.get_reacting_state_order() and state not in self.odes:
-                continue
+        Indices refer to positions in `get_state_order()`, i.e. the columns of a
+        simulation's output, not to the order in which states were added.
+        """
+        modeled = self.get_state_order()
+        observable = [
+            state
+            for state in modeled
+            if state not in self.odes or self.odes[state].observable
+        ]
 
-            if state in self.odes and not self.odes[state].observable:
-                continue
-
-            if as_indices:
-                observable_states.append(i)
-            else:
-                observable_states.append(state)
-
-        return sorted(observable_states)
+        if as_indices:
+            return [modeled.index(state) for state in observable]
+        return observable
 
     def get_constants_order(self) -> List[str]:
         """Returns the order of the constants in the model"""

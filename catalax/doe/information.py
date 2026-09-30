@@ -125,9 +125,7 @@ def _prepare_information_function(
     )
     free_index = jnp.array([parameter_order.index(name) for name in free])
 
-    state_order = model.get_state_order()
-    # By name: get_observable_state_order(as_indices=True) indexes insertion order.
-    observed = [state_order.index(name) for name in model.get_observable_state_order()]
+    observed = model.get_observable_state_order(as_indices=True)
     if not observed:
         raise ValueError("The model has no observable states; nothing is measured.")
 
@@ -188,9 +186,6 @@ def _extract_design_arrays(
 ) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Reads ``(y0s, constants, times)`` from an initial-condition-only dataset.
 
-    ``Dataset.to_jax_arrays`` refuses measurements without data, so the times
-    are read from each measurement directly.
-
     Raises:
         ValueError: If the design has no arms, an arm lacks initial conditions or
             sampling times, or the arms have different numbers of times.
@@ -203,7 +198,6 @@ def _extract_design_arrays(
 
     state_order = model.get_state_order()
     constant_order = model.get_constants_order()
-    times = []
     for meas in design.measurements:
         missing = [
             name
@@ -215,27 +209,16 @@ def _extract_design_arrays(
                 f"Measurement '{meas.id}' has no initial condition for {missing}. "
                 "Pass every state and constant to design.add_initial(...)."
             )
-        if meas.time is None or len(meas.time) == 0:
-            raise ValueError(
-                f"Measurement '{meas.id}' has no sampling times. "
-                "Pass them as design.add_initial(time=..., ...)."
-            )
-        t = jnp.asarray(meas.time, dtype=float)
-        if not bool(t[0] >= 0) or not bool(jnp.all(jnp.diff(t) >= 0)):
-            raise ValueError(
-                f"Measurement '{meas.id}' needs non-negative, increasing sampling "
-                "times; simulations start at t = 0."
-            )
-        times.append(t)
 
-    if len({t.shape for t in times}) != 1:
+    times = design.to_time_matrix().astype(float)
+    if not bool(jnp.all(times[:, 0] >= 0)) or not bool(jnp.all(jnp.diff(times) >= 0)):
         raise ValueError(
-            "All measurements need the same number of sampling times, got "
-            f"{sorted({len(t) for t in times})}."
+            "Sampling times must be non-negative and increasing; simulations "
+            "start at t = 0."
         )
 
     return (
         design.to_y0_matrix(state_order),
         design.to_y0_matrix(constant_order),
-        jnp.stack(times),
+        times,
     )

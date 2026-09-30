@@ -450,6 +450,40 @@ class Dataset(BaseModel):
 
         return jnp.stack(inits, axis=0)
 
+    def to_time_matrix(self) -> Array:
+        """Create a matrix of time points for all measurements.
+
+        Unlike `to_jax_arrays`, this needs no measured data, so it also works on
+        measurements created with `add_initial(time=...)`, e.g. an experimental
+        design.
+
+        Returns:
+            JAX array of shape (n_measurements, n_time_points)
+
+        Raises:
+            ValueError: If a measurement has no time points, or the measurements
+                have different numbers of time points
+        """
+        missing = [
+            meas.id
+            for meas in self.measurements
+            if meas.time is None or len(meas.time) == 0
+        ]
+        if missing:
+            raise ValueError(
+                f"Measurements {missing} have no time points. Pass them via "
+                "add_initial(time=...) or add data with times."
+            )
+
+        lengths = {len(meas.time) for meas in self.measurements}  # type: ignore
+        if len(lengths) > 1:
+            raise ValueError(
+                "All measurements need the same number of time points to be "
+                f"stacked, got {sorted(lengths)}."
+            )
+
+        return jnp.stack([jnp.asarray(meas.time) for meas in self.measurements])
+
     def has_data(self) -> bool:
         """Check if the dataset has any data.
 
