@@ -47,10 +47,10 @@ import catalax.mcmc as cmc
 ctx.enable_x64()  # Fisher matrices are often too ill-conditioned for float32
 
 model = ctx.Model(name="Michaelis-Menten")
-model.add_state("s, p")
-model.add_constant("e")
-model.add_ode("s", "-kcat * e * s / (k_m + s)")
+model.add_state("s, p, e")
+model.add_ode("s", "-kcat * e * s / (k_m + s)", observable=True)
 model.add_ode("p", "kcat * e * s / (k_m + s)", observable=False)
+model.add_ode("e", "0", observable=False)
 
 model.parameters["kcat"].value = 10.0
 model.parameters["kcat"].prior = cmc.priors.Uniform(low=5.0, high=20.0)
@@ -86,7 +86,11 @@ info.parameter_order  # ['k_m', 'kcat'], alphabetical like get_parameter_order()
 info.valid            # False if any simulation failed to solve
 ```
 
-Parameters marked `constant=True` are left out of the matrix and enter the simulation at their `value`. Only states that are observable (the default for `add_ode`) contribute measurements.
+Parameters marked `constant=True` are left out of the matrix and enter the simulation at their `value`. Only states whose ODE is marked `observable=True` contribute measurements. Declare `observable` explicitly for every state.
+
+### States and constants
+
+Every initial condition in a design is a design variable, whether it belongs to a state or to a constant. `catalax.doe` makes no distinction between enzymes, substrates, products or any other species. A state is measured if and only if its ODE is `observable=True`, and it changes only as its rate says: `"0"` keeps it at its initial amount, and a term such as `"-k_inact * e"` adds a parameter the design informs like any other. A constant cannot change during the reaction. The two are interchangeable for a species that does not change: for the bi-substrate model, the Fisher matrices with the enzyme as a constant and as an unobservable zero-rate state agree to 1.2e-8.
 
 ## Requirements on priors
 

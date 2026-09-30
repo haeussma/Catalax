@@ -76,7 +76,7 @@ def evaluate_design(
         ValueError: If a free parameter has no prior or its prior allows values
             that are not strictly positive.
     """
-    information, parameter_order = _prepare_information_function(
+    information, parameter_order, arrays = _prepare_information_function(
         model, design, noise, config=config
     )
     priors = _extract_priors(model, parameter_order)
@@ -93,15 +93,17 @@ def evaluate_design(
     prior_precision = jnp.diag(1.0 / prior_var)
 
     def _efficiency(theta: jax.Array) -> tuple[jax.Array, jax.Array]:
-        F, valid = information(theta)
+        F, valid = information(theta, *arrays)
         posterior = jnp.linalg.inv(F + prior_precision)
         return 1.0 - jnp.sqrt(jnp.diag(posterior) / prior_var), valid
 
     efficiency, valid = jax.jit(jax.vmap(_efficiency))(thetas)
 
     n_valid = int(valid.sum())
-    mean = jnp.where(valid[:, None], efficiency, 0.0).sum(0) / n_valid
-    maximin = jnp.where(valid, efficiency.min(-1), 0.0).sum() / n_valid
+    # One reduction for both, so maximin <= min(efficiency) holds to the bit when
+    # the same parameter is the worst in every draw.
+    columns = jnp.column_stack([efficiency, efficiency.min(-1)])
+    *mean, maximin = jnp.where(valid[:, None], columns, 0.0).sum(0) / n_valid
     return DesignReport(
         efficiency={name: float(e) for name, e in zip(parameter_order, mean)},
         maximin=float(maximin),

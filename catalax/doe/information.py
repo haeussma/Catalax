@@ -24,7 +24,12 @@ from catalax.tools.simulation import Simulation
 if TYPE_CHECKING:
     from catalax.model.model import Model
 
-type InformationFunction = Callable[[jax.Array], tuple[jax.Array, jax.Array]]
+type InformationFunction = Callable[
+    [jax.Array, jax.Array, jax.Array, jax.Array], tuple[jax.Array, jax.Array]
+]
+"""``(theta_free, y0s, constants, times) -> (F, valid)``."""
+type DesignArrays = tuple[jax.Array, jax.Array, jax.Array]
+"""``(y0s, constants, times)``, one row per arm, as read from a design dataset."""
 
 
 @dataclass
@@ -62,8 +67,12 @@ def fisher_information(
             experimental arm, built with ``Dataset.add_initial(time=..., **ics)``.
             ``time`` holds the sampling times.
         noise: Observation noise model; a bare float means ``Homoskedastic``.
-        config: Solver configuration. Defaults to tight tolerances
-            (rtol = atol = 1e-8, max_steps = 4096, throw = False).
+        config: Solver configuration. Defaults to Tsit5 with tight tolerances
+            (rtol = atol = 1e-8, max_steps = 4096, throw = False). Sensitivities
+            are integrated alongside the states, so a stiff solver runs Newton on
+            the whole augmented system: for one MAT arm (standalone diffrax probe),
+            a design gradient took Kvaerno5 310 steps and 34 ms, Tsit5 75 steps
+            and 2 ms.
 
     Returns:
         The information matrix, its parameter order and a validity flag.
@@ -72,11 +81,11 @@ def fisher_information(
         ValueError: If a parameter value is missing or not positive, or the
             design is incomplete.
     """
-    information, parameter_order = _prepare_information_function(
+    information, parameter_order, arrays = _prepare_information_function(
         model, design, noise, config=config
     )
     theta = _extract_values(model, parameter_order)
-    matrix, valid = information(theta)
+    matrix, valid = information(theta, *arrays)
     return Information(
         matrix=matrix, parameter_order=parameter_order, valid=bool(valid)
     )
@@ -88,8 +97,12 @@ def _prepare_information_function(
     noise: NoiseModel | float,
     *,
     config: SimulationConfig | None,
-) -> tuple[InformationFunction, list[str]]:
-    """Builds ``theta_free -> (F, valid)``, traceable and ``vmap``-able.
+) -> tuple[InformationFunction, list[str], DesignArrays]:
+    """Builds ``(theta_free, y0s, constants, times) -> (F, valid)``.
+
+    The function is traceable, ``vmap``-able over ``theta_free`` and
+    differentiable with respect to the design arrays. The design is validated
+    here, outside traced code.
 
     Args:
         model: Model to simulate.
@@ -98,8 +111,9 @@ def _prepare_information_function(
         config: Solver configuration, or None for the defaults.
 
     Returns:
-        The information function, taking free parameter values in natural units,
-        and the free parameter order.
+        The information function, taking free parameter values in natural units
+        and the design arrays; the free parameter order; and the design's
+        ``(y0s, constants, times)``.
     """
     if not jax.config.jax_enable_x64:
         warnings.warn(
@@ -135,18 +149,22 @@ def _prepare_information_function(
             t1=float(times.max()), rtol=1e-8, atol=1e-8, max_steps=4096, throw=False
         )
 
-    in_axes = (0, None, 0, 0)
-    simulate, _ = Simulation(sim_input=model.sim_input, config=config)._prepare_func(
-        in_axes=in_axes
-    )
-    sensitivities, _ = Simulation(
-        sim_input=model.sim_input, config=config, sensitivity=InAxes.PARAMETERS
-    )._prepare_func(in_axes=in_axes)
+    simulate, _ = Simulation(
+        sim_input=model.sim_input,
+        config=config,
+        sensitivity=InAxes.PARAMETERS,
+        sensitivity_method="forward",
+    )._prepare_func(in_axes=(0, None, 0, 0))
 
-    def information(theta_free: jax.Array) -> tuple[jax.Array, jax.Array]:
+    def information(
+        theta_free: jax.Array,
+        y0s: jax.Array,
+        constants: jax.Array,
+        times: jax.Array,
+    ) -> tuple[jax.Array, jax.Array]:
         theta = base.at[free_index].set(theta_free)
-        y = simulate(y0s, theta, constants, times)[..., observed]
-        S = sensitivities(y0s, theta, constants, times)[..., observed, :]
+        y, S = simulate(y0s, theta, constants, times)
+        y, S = y[..., observed], S[..., observed, :]
         S_log = S[..., free_index] * theta_free  # chain rule: dy/dlog(t) = t dy/dt
 
         finite = jnp.isfinite(y) & jnp.all(jnp.isfinite(S_log), axis=-1)
@@ -157,7 +175,7 @@ def _prepare_information_function(
         F = W.T @ W
         return 0.5 * (F + F.T), jnp.all(finite)
 
-    return information, free
+    return information, free, (y0s, constants, times)
 
 
 def _extract_values(model: Model, names: list[str]) -> jax.Array:

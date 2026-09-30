@@ -21,14 +21,19 @@ def _load_oracle() -> dict:
     return json.loads(FIXTURE.read_text())
 
 
-def _mat_model(meta: dict, theta: dict[str, float]) -> ctx.Model:
+def _mat_model(meta: dict, theta: dict[str, float], enzyme: str) -> ctx.Model:
+    """MAT with ``E`` as a constant, or as an unobservable state with zero rate."""
     rate = meta["rate_law"]
     model = ctx.Model(name="MAT")
-    model.add_state("A, B, P")
-    model.add_constant("E")
+    if enzyme == "constant":
+        model.add_state("A, B, P")
+        model.add_constant("E")
+    else:
+        model.add_state("A, B, E, P")
+        model.add_ode("E", "0", observable=False)
     model.add_ode("A", f"-({rate})", observable=False)
     model.add_ode("B", f"-({rate})", observable=False)
-    model.add_ode("P", rate)
+    model.add_ode("P", rate, observable=True)
     for name, value in theta.items():
         model.parameters[name].value = value
     return model
@@ -47,13 +52,14 @@ def _design(model: ctx.Model, meta: dict, case: dict) -> ctx.Dataset:
     return design
 
 
-def test_oracle_matches_closed_form():
+@pytest.mark.parametrize("enzyme", ["constant", "state"])
+def test_oracle_matches_closed_form(enzyme: str):
     oracle = _load_oracle()
     meta = oracle["meta"]
     curve_errors, fisher_errors, direction_errors = [], [], []
 
     for case in oracle["cases"]:
-        model = _mat_model(meta, case["theta"])
+        model = _mat_model(meta, case["theta"], enzyme)
         design = _design(model, meta, case)
         assert model.get_parameter_order() == meta["param_order"]
         assert model.get_observable_state_order() == [meta["observable"]]
@@ -81,7 +87,7 @@ def test_oracle_matches_closed_form():
         direction_errors.append(np.linalg.norm(L_inv @ (F - F_ref) @ L_inv.T, ord=2))
 
     print(
-        f"\nmax curve rel err {max(curve_errors):.3e}, "
+        f"\n[E as {enzyme}] max curve rel err {max(curve_errors):.3e}, "
         f"max Fisher Frobenius rel err {max(fisher_errors):.3e}, "
         f"max whitened spectral err {max(direction_errors):.3e}"
     )

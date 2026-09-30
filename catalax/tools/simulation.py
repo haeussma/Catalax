@@ -3,6 +3,7 @@ from typing import Any, Callable, List, Literal, Optional, Sequence, Tuple
 import diffrax as dfx
 import equinox as eqx
 import jax
+import jax.numpy as jnp
 from diffrax import (
     ConstantStepSize,
     PIDController,
@@ -126,6 +127,13 @@ class Simulation(BaseModel):
         sim_input: Configuration containing ODEs, reactions, and variable definitions
         config: Simulation configuration including solver settings and tolerances
         sensitivity: Optional sensitivity analysis configuration for computing Jacobians
+        sensitivity_method: How sensitivities are computed. "reverse" differentiates
+            through the solver with ``jax.jacobian`` and returns only the Jacobian.
+            "forward" integrates ``S = dy/dparameters`` alongside the states
+            (``dS/dt = J_y S + df/dparameters``, ``S(0) = 0``) and returns
+            ``(ys, S)``; the result stays differentiable with respect to the
+            initial conditions, constants and time points. Only
+            ``InAxes.PARAMETERS`` is supported in forward mode.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -133,6 +141,7 @@ class Simulation(BaseModel):
     sim_input: SimulationInput
     config: SimulationConfig
     sensitivity: Optional[InAxes] = None
+    sensitivity_method: Literal["reverse", "forward"] = "reverse"
 
     _simulation_func: Optional[Callable] = PrivateAttr(default=None)
 
@@ -185,6 +194,19 @@ class Simulation(BaseModel):
         Raises:
             ValueError: If an invalid stack type is determined or if the system has no ODEs or reactions
         """
+        if self.sensitivity_method == "forward":
+            if self.sensitivity is not InAxes.PARAMETERS:
+                raise NotImplementedError(
+                    f"Forward sensitivities support only sensitivity=InAxes.PARAMETERS, "
+                    f"got {self.sensitivity}. Use sensitivity_method='reverse' for "
+                    "other axes."
+                )
+            forward_system = self._create_forward_sensitivity_system(
+                self.sim_input.stack,
+                self._create_controller(),
+            )
+            return self._prepare_standard_func(forward_system, in_axes)  # type: ignore
+
         simulate_system = self._create_simulate_system(
             self.sim_input.stack,
             self._create_controller(),
@@ -256,23 +278,86 @@ class Simulation(BaseModel):
                 Solution array at specified time points with shape (n_timepoints, n_states).
                 If throw=False and integration fails, returns array filled with inf values.
             """
-            sol = diffeqsolve(
-                terms=dfx.ODETerm(stack),
-                solver=self.config.solver(),
-                t0=0,
-                t1=time[-1],
-                dt0=self.config.dt0,
-                y0=y0,
-                args=(parameters, constants),
-                saveat=SaveAt(ts=time),
-                stepsize_controller=controller,
-                max_steps=self.config.max_steps,
-                throw=self.config.throw,
-            )
-
-            return sol.ys
+            return self._solve(stack, y0, (parameters, constants), time, controller)
 
         return _simulate_system
+
+    def _create_forward_sensitivity_system(
+        self,
+        stack: BaseStack | MixedStack,
+        controller: ConstantStepSize | PIDController,
+    ) -> Callable:
+        """
+        Create a simulation function that integrates parameter sensitivities as states.
+
+        The right-hand side ``f = stack(t, y, (parameters, constants))`` is augmented
+        with ``dS/dt = J_y S + df/dparameters`` for ``S = dy/dparameters``, with
+        ``S(0) = 0``. Both terms come from one ``jax.jvp`` per parameter, with tangent
+        ``(S[:, j], e_j)``. Unlike ``jax.jacobian`` through the solve, the result can
+        be differentiated again with respect to ``y0``, ``constants`` and ``time``.
+
+        Args:
+            stack: Stack object containing the ODE system
+            controller: Stepsize controller for the solver
+
+        Returns:
+            Function of ``(y0, parameters, constants, time)`` returning ``(ys, S)`` with
+            shapes ``(n_timepoints, n_states)`` and
+            ``(n_timepoints, n_states, n_parameters)``. If throw=False and integration
+            fails, both are filled with inf values.
+        """
+
+        def augmented(t, state, args):
+            (y, S), (parameters, constants) = state, args
+
+            def f(y, parameters):
+                return stack(t, y, (parameters, constants))
+
+            # ponytail: sensitivities are computed for fixed parameters too; restrict
+            # the tangent basis to the free ones when a model has many fixed parameters.
+            dS = jax.vmap(
+                lambda s, e: jax.jvp(f, (y, parameters), (s, e))[1],
+                in_axes=1,
+                out_axes=1,
+            )(S, jnp.eye(parameters.shape[0], dtype=S.dtype))
+            return f(y, parameters), dS
+
+        def _simulate_with_sensitivities(y0, parameters, constants, time):
+            S0 = jnp.zeros(
+                (y0.shape[0], parameters.shape[0]),
+                dtype=jnp.result_type(y0, parameters, float),
+            )
+            return self._solve(
+                augmented, (y0, S0), (parameters, constants), time, controller
+            )
+
+        return _simulate_with_sensitivities
+
+    def _solve(self, vector_field, y0, args, time, controller) -> PyTree:
+        """
+        Solve ``dy/dt = vector_field(t, y, args)`` from ``t = 0`` to ``time[-1]``.
+
+        Honours the solver, ``dt0``, ``max_steps`` and ``throw`` of the configuration.
+
+        Returns:
+            The solution at ``time``, with the pytree structure of ``y0``.
+            If throw=False and integration fails, it is filled with inf values.
+        """
+        sol = diffeqsolve(
+            terms=dfx.ODETerm(vector_field),
+            solver=self.config.solver(),
+            t0=0,
+            t1=time[-1],
+            dt0=self.config.dt0,
+            y0=y0,
+            args=args,
+            saveat=SaveAt(ts=time),
+            stepsize_controller=controller,
+            max_steps=self.config.max_steps,
+            throw=self.config.throw,
+        )
+
+        return sol.ys
 
     def _prepare_sensitivity_func(self, simulate_system, in_axes):
         """
