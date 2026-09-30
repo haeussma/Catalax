@@ -1,0 +1,103 @@
+---
+title: "Experimental Design"
+---
+
+Before running an experiment it is worth asking how much it will teach you. `catalax.doe` answers that question for any Catalax model: given a candidate design (which initial conditions to prepare and when to sample), it computes how much the measurements are expected to shrink the uncertainty of each kinetic parameter. Comparing candidate lab protocols, or checking that every parameter is identifiable before spending time at the bench, needs nothing more than the model and its priors.
+
+## What the module computes
+
+### Fisher information in log parameters
+
+A design is a set of experimental arms. Each arm fixes the initial conditions of the states and constants, and a list of sampling times. For the free parameters $\theta$ (all parameters with `constant=False`), `catalax.doe` computes the sensitivities of every observable state at every sampling time with respect to $\log \theta$. Working in log space makes the result dimensionless: a design's score does not change when $K_m$ is reported in mM instead of µM.
+
+The sensitivities are whitened by the observation noise, $w = \frac{1}{\mathrm{sd}(y)} \frac{\partial y}{\partial \log \theta}$, and the Fisher information sums over arms, times and observable states:
+
+$$
+F(\theta) = \sum_{\text{arms}} \sum_{t} \sum_{\text{observables}} w\, w^\top
+$$
+
+Two noise models are provided. `Homoskedastic(sigma)` has a constant standard deviation. `Proportional(cv, floor)` has $\mathrm{sd}(y) = \sqrt{\text{floor}^2 + (\text{cv} \cdot y)^2}$, the usual model for HPLC-type assays whose error grows with the measured amount. Any object with `scale(prediction)` and `whiten(sensitivities, prediction)` methods works as a noise model.
+
+### Posterior shrinkage and efficiency
+
+With a prior covariance $\Sigma_0$ on $\log\theta$, the Laplace approximation of the posterior after the experiment is
+
+$$
+\Sigma_\text{post} = \left(F(\theta) + \Sigma_0^{-1}\right)^{-1}
+$$
+
+The **efficiency** of parameter $j$ is the fraction of its prior uncertainty the design removes:
+
+$$
+e_j = 1 - \frac{\mathrm{sd}_{\text{post},j}}{\mathrm{sd}_{\text{prior},j}}
+$$
+
+An efficiency of 0 means the design teaches nothing beyond the prior, 1 means the parameter is pinned exactly. Because $F$ depends on the unknown $\theta$, `evaluate_design` averages over draws from the prior. It reports the mean efficiency per parameter and the **maximin** efficiency, $\mathbb{E}_\theta[\min_j e_j]$, the expected efficiency of the worst-determined parameter. A good design leaves no parameter close to its prior, so maximin is the number to compare designs by.
+
+## Usage
+
+A design is an ordinary `Dataset` holding one initial-condition-only measurement per arm. The `time` argument of `add_initial` sets the sampling times.
+
+```python
+import jax
+import catalax as ctx
+import catalax.doe as cdoe
+import catalax.mcmc as cmc
+
+ctx.enable_x64()  # Fisher matrices are often too ill-conditioned for float32
+
+model = ctx.Model(name="Michaelis-Menten")
+model.add_state("s, p")
+model.add_constant("e")
+model.add_ode("s", "-kcat * e * s / (k_m + s)")
+model.add_ode("p", "kcat * e * s / (k_m + s)", observable=False)
+
+model.parameters["kcat"].value = 10.0
+model.parameters["kcat"].prior = cmc.priors.Uniform(low=5.0, high=20.0)
+model.parameters["k_m"].value = 100.0
+model.parameters["k_m"].prior = cmc.priors.Uniform(low=50.0, high=200.0)
+
+times = [10.0, 40.0, 80.0, 150.0, 300.0]
+
+low_only = ctx.Dataset.from_model(model)
+low_only.add_initial(time=times, s=50.0, p=0.0, e=0.1)
+low_only.add_initial(time=times, s=60.0, p=0.0, e=0.1)
+
+spread = ctx.Dataset.from_model(model)
+spread.add_initial(time=times, s=50.0, p=0.0, e=0.1)
+spread.add_initial(time=times, s=400.0, p=0.0, e=0.1)
+
+noise = cdoe.Proportional(cv=0.05, floor=0.5)
+key = jax.random.PRNGKey(0)
+
+for name, design in [("low only", low_only), ("spread", spread)]:
+    report = cdoe.evaluate_design(model, design, noise, key=key)
+    print(name, report.maximin, report.efficiency)
+```
+
+Use the same `key` for every candidate so they are scored on the same prior draws.
+
+To look at the information at a single parameter vector, the model's current values, use `fisher_information`:
+
+```python
+info = cdoe.fisher_information(model, spread, noise)
+info.matrix           # (n_free, n_free), rows and columns in info.parameter_order
+info.parameter_order  # ['k_m', 'kcat'], alphabetical like get_parameter_order()
+info.valid            # False if any simulation failed to solve
+```
+
+Parameters marked `constant=True` are left out of the matrix and enter the simulation at their `value`. Only states that are observable (the default for `add_ode`) contribute measurements.
+
+## Requirements on priors
+
+`evaluate_design` draws the free parameters from their own `prior`, the same priors `run_mcmc` uses. Every free parameter needs one, and because the design is scored in log parameters the prior must only allow strictly positive values:
+
+- `Uniform(low, high)` with `low > 0`: fine, and the common case
+- `LogNormal`, `LogUniform`, and `TruncatedNormal` with `low > 0`: fine
+- `Normal`, or `Uniform`/`TruncatedNormal` with `low <= 0`: rejected with an error naming the parameter
+
+For `LogNormal` priors the prior variance of $\log\theta$ is exact; for all other priors it is estimated from 20,000 prior samples.
+
+## Solver settings and failed simulations
+
+Information needs accurate derivatives, so both functions default to tight solver tolerances (`rtol = atol = 1e-8`, `max_steps = 4096`). Pass `config=ctx.SimulationConfig(...)` to change them. A simulation that fails never produces NaN in the results: its points contribute nothing to the information, `Information.valid` is `False`, and `evaluate_design` averages only over the prior draws that solved (`DesignReport.n_valid`).

@@ -80,3 +80,14 @@ def dataset():
             data={"s1": data[1, :, 0]},
         )
     )
+
+
+@pytest.fixture
+def x64():
+    """Runs a test in float64 and restores the previous precision afterwards."""
+    import jax
+
+    previous = jax.config.jax_enable_x64
+    jax.config.update("jax_enable_x64", True)
+    yield
+    jax.config.update("jax_enable_x64", previous)

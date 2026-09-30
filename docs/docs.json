@@ -54,6 +54,13 @@
             ]
           },
           {
+            "group": "Experimental design",
+            "icon": "flask-vial",
+            "pages": [
+              "doe/overview"
+            ]
+          },
+          {
             "group": "Neural ODEs",
             "icon": "brain",
             "pages": [
