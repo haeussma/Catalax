@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -11,7 +12,7 @@ import numpyro.distributions as dist
 from numpyro.distributions import constraints
 
 from catalax.dataset.dataset import Dataset
-from catalax.doe.information import _prepare_information_function
+from catalax.doe.information import DesignArrays, _prepare_information_function
 from catalax.doe.noise import NoiseModel
 from catalax.model.simconfig import SimulationConfig
 
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
     from catalax.model.model import Model
 
 _N_PRIOR_SAMPLES = 20_000
+
+type EfficiencyFunction = Callable[[jax.Array, jax.Array], tuple[jax.Array, jax.Array]]
+"""``(y0s, constants) -> (efficiency[n_draws, n_free], valid[n_draws])``."""
 
 
 @dataclass
@@ -76,6 +80,55 @@ def evaluate_design(
         ValueError: If a free parameter has no prior or its prior allows values
             that are not strictly positive.
     """
+    efficiency_fn, parameter_order, (y0s, constants, _) = _prepare_efficiency(
+        model, design, noise, key=key, n_draws=n_draws, config=config
+    )
+    # Prior draws enter the jit as an argument (they are the Partial's leaf) and
+    # the design as a constant, exactly as before the helper was factored out:
+    # swapping the two moves the scores in the 15th digit.
+    efficiency, valid = jax.jit(lambda fn: fn(y0s, constants))(efficiency_fn)
+
+    n_valid = int(valid.sum())
+    # One reduction for both, so maximin <= min(efficiency) holds to the bit when
+    # the same parameter is the worst in every draw.
+    columns = jnp.column_stack([efficiency, efficiency.min(-1)])
+    *mean, maximin = jnp.where(valid[:, None], columns, 0.0).sum(0) / n_valid
+    return DesignReport(
+        efficiency={name: float(e) for name, e in zip(parameter_order, mean)},
+        maximin=float(maximin),
+        n_valid=n_valid,
+        n_draws=n_draws,
+        parameter_order=parameter_order,
+    )
+
+
+def _prepare_efficiency(
+    model: Model,
+    design: Dataset,
+    noise: NoiseModel | float,
+    *,
+    key: jax.Array,
+    n_draws: int,
+    config: SimulationConfig | None,
+) -> tuple[EfficiencyFunction, list[str], DesignArrays]:
+    """Builds ``(y0s, constants) -> (e[n_draws, n_free], valid[n_draws])``.
+
+    The prior draws are taken once, here, so every call scores against the same
+    draws; the sampling times are fixed to the design's. The function is
+    traceable and differentiable with respect to ``y0s`` and ``constants``.
+
+    Args:
+        model: Model whose free parameters all carry a positive-support prior.
+        design: Design dataset; fixes the sampling times and the array shapes.
+        noise: Observation noise model.
+        key: PRNG key for the prior draws.
+        n_draws: Number of prior draws.
+        config: Solver configuration, or None for the defaults.
+
+    Returns:
+        The efficiency function, the free parameter order and the design's
+        ``(y0s, constants, times)``.
+    """
     information, parameter_order, arrays = _prepare_information_function(
         model, design, noise, config=config
     )
@@ -91,26 +144,19 @@ def evaluate_design(
     )
     prior_var = _prior_log_variance(priors, cov_key)
     prior_precision = jnp.diag(1.0 / prior_var)
+    times = arrays[2]
 
-    def _efficiency(theta: jax.Array) -> tuple[jax.Array, jax.Array]:
-        F, valid = information(theta, *arrays)
-        posterior = jnp.linalg.inv(F + prior_precision)
-        return 1.0 - jnp.sqrt(jnp.diag(posterior) / prior_var), valid
+    def efficiency(
+        thetas: jax.Array, y0s: jax.Array, constants: jax.Array
+    ) -> tuple[jax.Array, jax.Array]:
+        def _one(theta: jax.Array) -> tuple[jax.Array, jax.Array]:
+            F, valid = information(theta, y0s, constants, times)
+            posterior = jnp.linalg.inv(F + prior_precision)
+            return 1.0 - jnp.sqrt(jnp.diag(posterior) / prior_var), valid
 
-    efficiency, valid = jax.jit(jax.vmap(_efficiency))(thetas)
+        return jax.vmap(_one)(thetas)
 
-    n_valid = int(valid.sum())
-    # One reduction for both, so maximin <= min(efficiency) holds to the bit when
-    # the same parameter is the worst in every draw.
-    columns = jnp.column_stack([efficiency, efficiency.min(-1)])
-    *mean, maximin = jnp.where(valid[:, None], columns, 0.0).sum(0) / n_valid
-    return DesignReport(
-        efficiency={name: float(e) for name, e in zip(parameter_order, mean)},
-        maximin=float(maximin),
-        n_valid=n_valid,
-        n_draws=n_draws,
-        parameter_order=parameter_order,
-    )
+    return jax.tree_util.Partial(efficiency, thetas), parameter_order, arrays
 
 
 def _extract_priors(model: Model, names: list[str]) -> list[dist.Distribution]:

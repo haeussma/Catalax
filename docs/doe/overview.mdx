@@ -92,6 +92,49 @@ Parameters marked `constant=True` are left out of the matrix and enter the simul
 
 Every initial condition in a design is a design variable, whether it belongs to a state or to a constant. `catalax.doe` makes no distinction between enzymes, substrates, products or any other species. A state is measured if and only if its ODE is `observable=True`, and it changes only as its rate says: `"0"` keeps it at its initial amount, and a term such as `"-k_inact * e"` adds a parameter the design informs like any other. A constant cannot change during the reaction. The two are interchangeable for a species that does not change: for the bi-substrate model, the Fisher matrices with the enzyme as a constant and as an unobservable zero-rate state agree to 1.2e-8.
 
+## Optimising a design
+
+`optimize_design` searches the initial conditions of `n_arms` experiments for the design with the highest expected maximin efficiency, and returns it as a `Dataset` ready for the lab. Continuing the Michaelis–Menten example:
+
+```python
+spec = {
+    "s": (10.0, 1000.0),  # free: each arm picks its substrate inside the box
+    "p": (0.0, 0.0),      # fixed: no product at the start
+    "e": (0.1, 0.1),      # fixed: one enzyme concentration
+}
+
+result = cdoe.optimize_design(
+    model,
+    spec,
+    noise,
+    n_arms=2,
+    times=times,
+    key=jax.random.PRNGKey(1),
+    n_draws=16,
+)
+
+for measurement in result.dataset.measurements:
+    print(measurement.initial_conditions)
+print(result.report.maximin, result.report.efficiency)
+print(result.restart_scores)
+```
+
+The **spec** maps every state and constant of the model to a range `(low, high)`. There are no defaults: an initial condition the spec leaves out is an error, whether it belongs to an enzyme, a substrate or a product. `low == high` fixes that initial condition at `low` in every arm; `low < high` lets every arm choose its own value inside the box. The **sampling times** are fixed: every arm is sampled at `times`. Optimising them tends to specialise the design toward the prior median and to give up the tails of the prior.
+
+The search runs `n_restarts` gradient ascents (Adam) from Latin-hypercube starts. Each ascent maximises a smoothed maximin over `n_draws` fixed prior draws, and the restarts are then ranked on the exact maximin over `n_rank_draws` separate draws. `result.report` scores the winner on a third set of draws, because the winner's score on the draws it was selected on is biased upwards. Restarts that fail to solve on any ranking draw are dropped, since averaging over only the draws that solved would reward a design for failing; if every restart fails, `optimize_design` raises and suggests narrowing the bounds, raising `max_steps` or using a stiff solver.
+
+**`restart_scores`** is the maximin of every restart on the ranking draws. When they agree, the landscape has one basin and the restarts were insurance. When some fall well short, the landscape has several basins and the restarts were necessary. In that case raise `n_restarts` and check that the best score holds up with a different `key`. Use at least a few restarts; a single ascent can settle in a poor basin.
+
+**Cost** is linear in the number of prior draws and in the number of restarts. One gradient step for a bi-substrate model (4 states, 4 arms × 9 times, CPU, float64):
+
+| `n_draws` | per step | 8 restarts × 300 steps | 24 restarts × 600 steps |
+|---|---|---|---|
+| 16 | 27 ms | ~1 min | 6.4 min |
+| 64 | 105 ms | ~4 min | 25 min |
+| 256 | 499 ms | 20 min | 2 h |
+
+Explore with 16 draws, and use more for the design you run in the lab.
+
 ## Requirements on priors
 
 `evaluate_design` draws the free parameters from their own `prior`, the same priors `run_mcmc` uses. Every free parameter needs one, and because the design is scored in log parameters the prior must only allow strictly positive values:
