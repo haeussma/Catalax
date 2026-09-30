@@ -50,7 +50,20 @@ class MCMCConfig:
         num_chains: Number of Markov chains to run (default: 1)
         seed: Random seed for reproducibility (default: 420)
         verbose: Verbosity level; 0 for silent, 1 for progress (default: 1)
-        max_steps: Maximum number of integration steps (default: 64^4)
+        max_steps: Maximum solver steps per solve (default: 4096, SimulationConfig's default,
+            which every fit effectively used while the value was mis-routed into t1). Large
+            values are compiled into the adjoint's checkpoint schedule and blow up compile time.
+        noise_cv: If set, the observation noise is heteroscedastic,
+            sd_i = sqrt(sigma^2 + (cv * yhat_i)^2), with `sigma` the additive floor
+            (sampled as before) and `cv` a sampled proportional term with prior
+            HalfNormal(noise_cv). None (default) keeps the constant-sigma model.
+        rtol, atol: ODE solver tolerances (default 1e-5). Tighten them when the fitted
+            noise scale gets close to the solver error: the likelihood then becomes
+            rough, NUTS's energy error is dominated by solver noise, and dual averaging
+            drives the step size towards zero (tree depth pinned at the maximum).
+            HPLC peak areas need this: integration noise is additive and can push a
+            reading below zero, while injection volume and preparation scale with the
+            amount measured.
     """
 
     num_warmup: int
@@ -64,15 +77,26 @@ class MCMCConfig:
     num_chains: int = 1
     seed: int = 420
     verbose: int = 1
-    max_steps: int = 64**4
+    max_steps: int = 4096
     solver: Type[diffrax.AbstractSolver] = diffrax.Tsit5
+    noise_cv: Optional[float] = None
+    rtol: float = 1e-5
+    atol: float = 1e-5
 
     def to_simulation_config(self) -> SimulationConfig:
+        # t1 is never used by the MCMC simulation function (it integrates to the last
+        # data time); max_steps IS -- it used to land in t1 by mistake, leaving the solver
+        # at SimulationConfig's default of 4096 steps. With throw=False every solve that
+        # needs more returns inf, and the sampler's initial step-size search then spins on
+        # infinite energies (seen on completed batch curves at rtol 1e-6).
         return SimulationConfig(
             t1=self.max_steps,
             t0=0,
             dt0=self.dt0,
             solver=self.solver,
+            rtol=self.rtol,
+            atol=self.atol,
+            max_steps=self.max_steps,
         )
 
 
@@ -123,8 +147,11 @@ class HMC:
         num_chains: int = 1,
         seed: int = 420,
         verbose: int = 1,
-        max_steps: int = 64**4,
+        max_steps: int = 4096,
         solver: Type[diffrax.AbstractSolver] = diffrax.Tsit5,
+        noise_cv: Optional[float] = None,
+        rtol: float = 1e-5,
+        atol: float = 1e-5,
     ):
         """Initialize HMC sampler.
 
@@ -142,6 +169,8 @@ class HMC:
             verbose: Verbosity level; 0 for silent, 1 for progress
             max_steps: Maximum number of integration steps
             solver: Solver to use for simulation
+            noise_cv: Prior scale of a proportional noise term (see MCMCConfig); None
+                keeps the constant-sigma model
         """
         self.config = MCMCConfig(
             num_warmup=num_warmup,
@@ -157,6 +186,9 @@ class HMC:
             seed=seed,
             verbose=verbose,
             max_steps=max_steps,
+            noise_cv=noise_cv,
+            rtol=rtol,
+            atol=atol,
         )
         self.likelihood = likelihood
 
@@ -247,6 +279,7 @@ class HMC:
             config=config,
             sigma_surr=sigma_surr,
             rate_sigma=rate_sigma,
+            noise_cv=self.config.noise_cv,
         )
 
         # Initialize and run MCMC
@@ -291,6 +324,9 @@ class HMC:
             max_steps=config.max_steps,
             dt0=config.dt0,
             solver=config.solver,
+            noise_cv=config.noise_cv,
+            rtol=config.rtol,
+            atol=config.atol,
         )
 
 
@@ -315,6 +351,7 @@ class BayesianModel:
         rate_sigma: Optional[Array] = None,
         pre_model: Optional[PreModel] = None,
         post_model: Optional[PostModel] = None,
+        noise_cv: Optional[float] = None,
     ):
         """Initialize the Bayesian model.
 
@@ -342,6 +379,7 @@ class BayesianModel:
         self.dt0 = config.dt0
         self.sigma_surr = sigma_surr
         self.rate_sigma = rate_sigma
+        self.noise_cv = noise_cv
 
         # Pre-compute priors and observables
         self.priors = [
@@ -352,8 +390,16 @@ class BayesianModel:
             for param in model.get_parameter_order()
         ]
 
+        # Positions of the observable states *within* the modeled-state array.
+        # `states` is in modeled order (all states with an ODE); the data/yerrs
+        # arrays are in observable order. These coincide only when every modeled
+        # state is observable, so map names -> modeled position here.
+        # ponytail: assumes non-observable states sort last (true for a constant
+        # enzyme like SIHH); a non-observable state mid-order would misalign yerrs.
+        modeled_states = model.get_state_order(modeled=True)
+        observable_states = set(model.get_observable_state_order())
         self.observables = jnp.array(
-            model.get_state_order(as_indices=True, modeled=True)
+            [i for i, state in enumerate(modeled_states) if state in observable_states]
         )
 
     def __call__(
@@ -416,10 +462,16 @@ class BayesianModel:
         # Expand yerrs to match shape of states
         sigma_disc = numpyro.sample(
             "sigma",
-            dist.Normal(0.0, jnp.mean(self.yerrs[..., self.observables])),
+            dist.HalfNormal(jnp.mean(self.yerrs[..., self.observables])),
         )  # type: ignore
 
         sigma_total = sigma_disc**2
+
+        if self.noise_cv is not None:
+            # floor + proportional: the CV term scales with the *prediction*, not the
+            # datum, so a noisy low reading is not rewarded with a smaller variance.
+            cv = numpyro.sample("cv", dist.HalfNormal(self.noise_cv))
+            sigma_total = sigma_total + (cv * states[..., self.observables]) ** 2
 
         if self.sigma_surr is not None:
             sigma_total = self.sigma_surr[..., self.observables] ** 2 + sigma_total

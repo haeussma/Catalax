@@ -1,5 +1,7 @@
 from numpyro import distributions
 from typing import Optional
+import math
+
 from pydantic import BaseModel, ConfigDict, PrivateAttr, computed_field
 
 
@@ -95,6 +97,33 @@ class Uniform(Prior):
     def _print_str(self) -> str:
         """String representation of the distribution."""
         return f"U(low={self.low}, high={self.high})"
+
+
+class LogNormal(Prior):
+    """Log-Normal prior distribution.
+
+    Normal in log space, so the parameter is strictly positive and the prior is symmetric
+    in ratio rather than in difference — the natural shape for a rate or binding constant
+    known only to within a factor.
+
+    Attributes:
+        mu: Median of the distribution, in the parameter's own units (not log units)
+        sigma: Standard deviation in log space; approximately the coefficient of variation
+            for sigma below ~0.3
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    mu: float
+    sigma: float
+
+    def _distribution_fun(self) -> distributions.Distribution:
+        """Create the NumPyro distribution object."""
+        return distributions.LogNormal(loc=math.log(self.mu), scale=self.sigma)
+
+    def _print_str(self) -> str:
+        """String representation of the distribution."""
+        return f"LogN(median={self.mu}, sigma_log={self.sigma})"
 
 
 class LogUniform(Prior):
