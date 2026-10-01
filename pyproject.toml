@@ -45,6 +45,9 @@ dev = [
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
+[tool.pytest.ini_options]
+markers = ["expensive: slow tests, deselect with -m \"not expensive\""]
+
 [tool.ruff.lint]
 ignore = ["E741"]
 

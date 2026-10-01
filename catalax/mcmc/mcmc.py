@@ -392,10 +392,9 @@ class BayesianModel:
 
         # Positions of the observable states *within* the modeled-state array.
         # `states` is in modeled order (all states with an ODE); the data/yerrs
-        # arrays are in observable order. These coincide only when every modeled
-        # state is observable, so map names -> modeled position here.
-        # ponytail: assumes non-observable states sort last (true for a constant
-        # enzyme like SIHH); a non-observable state mid-order would misalign yerrs.
+        # arrays are already in observable order. These coincide only when every
+        # modeled state is observable, so this indexes `states` and never the
+        # data or yerrs.
         modeled_states = model.get_state_order(modeled=True)
         observable_states = set(model.get_observable_state_order())
         self.observables = jnp.array(
@@ -462,7 +461,7 @@ class BayesianModel:
         # Expand yerrs to match shape of states
         sigma_disc = numpyro.sample(
             "sigma",
-            dist.HalfNormal(jnp.mean(self.yerrs[..., self.observables])),
+            dist.HalfNormal(jnp.mean(self.yerrs)),
         )  # type: ignore
 
         sigma_total = sigma_disc**2

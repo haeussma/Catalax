@@ -135,6 +135,77 @@ The search runs `n_restarts` gradient ascents (Adam) from Latin-hypercube starts
 
 Explore with 16 draws, and use more for the design you run in the lab.
 
+## Closing the loop
+
+After round 1 has been measured, fit it with `run_mcmc` and design round 2 against the posterior instead of the priors. Pass the posterior samples as `belief`. `evaluate_design` and `optimize_design` then draw $\theta$ from those samples, with a bootstrap resample, and use their full log-space covariance as $\Sigma_0$. The correlations round 1 left in place are kept, for example a ridge between $k_\text{cat}$ and an inhibition constant. **Efficiency is then relative to the belief:** it is the shrinkage beyond what round 1 already taught, not beyond the priors.
+
+Until real data exists, round 1 can be simulated at the model's parameter values, with the same noise model the design was scored under. Continuing the Michaelis–Menten example:
+
+```python
+import numpyro.distributions as dist
+
+def measure(design, key):
+    """Simulates the design at the model's values and adds the design's noise."""
+    config = ctx.SimulationConfig(t1=max(times))
+    data = model.simulate(design, config, saveat=design.to_time_matrix())
+    for meas in data.measurements:
+        key, k = jax.random.split(key)
+        y = meas.data["s"]
+        meas.data["s"] = y + noise.scale(y) * jax.random.normal(k, y.shape)
+    return data
+
+mcmc_config = cmc.MCMCConfig(
+    num_warmup=500,
+    num_samples=250,
+    num_chains=4,
+    chain_method="parallel",
+    likelihood=dist.Normal,
+    noise_cv=0.1,  # HalfNormal scale of the fitted cv; covers the design's 0.05
+    verbose=0,
+)
+
+data = measure(result.dataset, jax.random.PRNGKey(2))
+fit_1 = cmc.run_mcmc(model, data, 0.5, mcmc_config)  # 0.5: the noise floor
+
+round_2 = cdoe.optimize_design(
+    model,
+    spec,
+    noise,
+    n_arms=2,
+    times=times,
+    key=jax.random.PRNGKey(3),
+    n_draws=16,
+    belief=fit_1.get_samples(),
+)
+print(round_2.report.efficiency)  # shrinkage beyond what round 1 taught
+
+for meas in measure(round_2.dataset, jax.random.PRNGKey(4)).measurements:
+    data.add_measurement(meas)
+fit_2 = cmc.run_mcmc(model, data, 0.5, mcmc_config)
+```
+
+With lab data, `data` is the measured `Dataset` instead, and nothing else changes. The simulated states that are not observable (`p` and `e` here) can stay in the data: `run_mcmc` fits the observable states only, and warns that the others are unused.
+
+- **Refit all the data under the original priors.** Merge the rounds with `add_measurement` and fit once more. Do not turn the last posterior into the next prior: the posterior is only known through finite samples, and any prior fitted to them is an approximation that compounds over rounds.
+- **Match the likelihood to the design's noise model.** `likelihood=dist.Normal` with `noise_cv` set gives the floor-plus-proportional noise of `Proportional`, with the floor's scale from `yerrs`. The default `SoftLaplace` would only rescale the information, but it should still match.
+- **Parallel chains need the host count set before JAX starts.** Call `ctx.set_host_count(n)` at the very top of the script, before any JAX operation, and use `chain_method="parallel"`. Four chains of the bi-substrate model took 80 s in sequence and 30 s in parallel. Once JAX has started, the call has no effect.
+- **`constant=True` parameters** are held at their `value` by `catalax.doe`, but `run_mcmc` still samples them from their priors. Their posterior samples are ignored by `belief`.
+- **Simulated data cannot detect a wrong rate law.** The data come from the model being fitted, so the fit is always consistent with it. Checking the mechanism needs real data.
+- **Rounds are not free.** In progress-doe, where this module was developed, greedy round-by-round designs lost to one joint design with the same total number of arms. The loop pays off when the prior turns out to be wrong, not by default.
+
+### How far to trust the efficiency numbers
+
+Every efficiency is a Laplace approximation. It was checked against NUTS posteriors of the bi-substrate model (enzyme as an unobservable state, `Proportional(0.05, 5)`, 6 time points, truth at the geometric midpoints of the priors). The noise was fixed at the truth in NUTS, and each cell gives the range over 3 noise seeds of the ratio of the Laplace posterior sd to the NUTS posterior sd, both in log space:
+
+| prior | arms | $k_\text{cat}$ | $K_{i,u}$ | $K_{m,A}$ | $K_{m,B}$ |
+|---|---|---|---|---|---|
+| Uniform | 4 | 0.67–0.73 | 0.68–0.73 | 0.83–0.85 | 0.77–0.86 |
+| Uniform | 16 (random) | 0.76–0.84 | 0.78–0.83 | 0.79–0.95 | 0.92–1.02 |
+| LogNormal | 4 | 0.93–0.98 | 0.93–0.96 | 1.00–1.03 | 0.99–1.08 |
+| LogNormal | 16 (random) | 0.92–1.00 | 0.94–0.98 | 0.92–1.06 | 1.04–1.10 |
+
+The LogNormal prior was matched to each Uniform prior in the mean and variance of $\log\theta$. The posterior correlation of $\log k_\text{cat}$ and $\log K_{i,u}$ was −0.98 to −1.00 in every run, so the ridge is not what separates the rows. The prior is. A `LogNormal` prior is Gaussian in $\log\theta$, so the Laplace step uses it exactly, and the numbers hold to within about 10%. A `Uniform` prior has no curvature in $\log\theta$ inside its box, but the Laplace step replaces it with a Gaussian of the same log variance. That Gaussian has curvature the Uniform does not, so it adds prior precision that is not really there. The efficiencies are then **optimistic** wherever the prior still carries weight: the posterior sd came out 1.2–1.5× wider than predicted at 4 arms. The gap closes as the data come to dominate the prior, as at 16 arms. With a Uniform prior, rank designs by efficiency, but do not read the absolute numbers as promises until the design pins the parameters well below their prior width.
+
 ## Requirements on priors
 
 `evaluate_design` draws the free parameters from their own `prior`, the same priors `run_mcmc` uses. Every free parameter needs one, and because the design is scored in log parameters the prior must only allow strictly positive values:

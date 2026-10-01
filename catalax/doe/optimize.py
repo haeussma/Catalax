@@ -11,6 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from jax.typing import ArrayLike
 
 from catalax.dataset.dataset import Dataset
 from catalax.doe.evaluate import DesignReport, _prepare_efficiency, evaluate_design
@@ -60,6 +61,7 @@ def optimize_design(
     learning_rate: float = 0.1,
     temperature: float = 0.01,
     config: SimulationConfig | None = None,
+    belief: Mapping[str, ArrayLike] | None = None,
 ) -> DesignResult:
     """Finds the initial conditions that maximise the expected maximin efficiency.
 
@@ -113,6 +115,9 @@ def optimize_design(
             biases the smoothed value below the hard one by at most
             ``temperature * log(n_free)``; 0.01 costs under 0.001.
         config: Solver configuration, see ``fisher_information``.
+        belief: Posterior samples of an earlier round to design against
+            instead of the priors, e.g. ``run_mcmc(...).get_samples()``; see
+            ``evaluate_design``. Every score is then relative to the belief.
 
     Returns:
         A ``DesignResult``.
@@ -133,10 +138,22 @@ def optimize_design(
     template = _to_dataset(model, [midpoint] * n_arms, times)
     start_key, ascent_key, rank_key, report_key = jax.random.split(key, 4)
     ascent_efficiency, _, (y0s, constants, _) = _prepare_efficiency(
-        model, template, noise, key=ascent_key, n_draws=n_draws, config=config
+        model,
+        template,
+        noise,
+        key=ascent_key,
+        n_draws=n_draws,
+        config=config,
+        belief=belief,
     )
     rank_efficiency, _, _ = _prepare_efficiency(
-        model, template, noise, key=rank_key, n_draws=n_rank_draws, config=config
+        model,
+        template,
+        noise,
+        key=rank_key,
+        n_draws=n_rank_draws,
+        config=config,
+        belief=belief,
     )
 
     # Free columns are set on the side-by-side [states | constants] template.
@@ -204,7 +221,13 @@ def optimize_design(
         model, [midpoint | dict(zip(free, row)) for row in winner], times
     )
     report = evaluate_design(
-        model, dataset, noise, key=report_key, n_draws=n_rank_draws, config=config
+        model,
+        dataset,
+        noise,
+        key=report_key,
+        n_draws=n_rank_draws,
+        config=config,
+        belief=belief,
     )
     return DesignResult(dataset=dataset, report=report, restart_scores=restart_scores)
 
