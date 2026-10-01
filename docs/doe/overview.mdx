@@ -20,11 +20,7 @@ Two noise models are provided. `Homoskedastic(sigma)` has a constant standard de
 
 ### Posterior shrinkage and efficiency
 
-With a prior covariance $\Sigma_0$ on $\log\theta$, the Laplace approximation of the posterior after the experiment is
-
-$$
-\Sigma_\text{post} = \left(F(\theta) + \Sigma_0^{-1}\right)^{-1}
-$$
+Because $F$ depends on the unknown $\theta$, `evaluate_design` averages over draws $\theta_i$ from the prior. For each draw, the data are summarised by a Gaussian likelihood of $\log\theta$ with precision $F(\theta_i)$, centred where a noisy dataset would put it. That likelihood is combined with the **exact** prior by importance weights over 65,536 prior samples, and the posterior sd of each $\log\theta_j$ is the weighted sd of those samples. Averaged over the draws, this is the expected posterior sd after the experiment. It is reported as `relative_sd`: an sd of 0.21 in $\log\theta$ reads as about ±21% at one sd, or ×/÷ $e^{0.21} = 1.23$.
 
 The **efficiency** of parameter $j$ is the fraction of its prior uncertainty the design removes:
 
@@ -32,7 +28,15 @@ $$
 e_j = 1 - \frac{\mathrm{sd}_{\text{post},j}}{\mathrm{sd}_{\text{prior},j}}
 $$
 
-An efficiency of 0 means the design teaches nothing beyond the prior, 1 means the parameter is pinned exactly. Because $F$ depends on the unknown $\theta$, `evaluate_design` averages over draws from the prior. It reports the mean efficiency per parameter and the **maximin** efficiency, $\mathbb{E}_\theta[\min_j e_j]$, the expected efficiency of the worst-determined parameter. A good design leaves no parameter close to its prior, so maximin is the number to compare designs by.
+An efficiency of 0 means the design teaches nothing beyond the prior, 1 means the parameter is pinned exactly. A prior of $k_\text{cat}$ = 5–20 has a log sd of 0.38 (±38%); a design that leaves ±21% has an efficiency of $1 - 0.21/0.38 = 0.44$. A design that teaches almost nothing can come out slightly below 0, because some possible datasets push the posterior against a bound of the prior. `evaluate_design` reports the mean efficiency per parameter and the **maximin** efficiency, $\mathbb{E}_\theta[\min_j e_j]$, the expected efficiency of the worst-determined parameter. A good design leaves no parameter close to its prior, so maximin is the number to compare designs by.
+
+**The search uses a cheaper score.** `optimize_design` needs a smooth score it can differentiate thousands of times, so it uses the Laplace approximation of the posterior,
+
+$$
+\Sigma_\text{post} = \left(F(\theta) + \Sigma_0^{-1}\right)^{-1},
+$$
+
+with $\Sigma_0$ the prior covariance of $\log\theta$. A `Uniform` prior then becomes a Gaussian of the same log variance, which has curvature the box does not have and ignores the box's edges. The Laplace numbers can be off by a factor of 1.5 either way, but Laplace ranks designs correctly. A search on the reweighted score found the same design (see [below](#how-far-to-trust-the-numbers)). So the search is Laplace and the report is reweighted.
 
 ## Usage
 
@@ -72,10 +76,22 @@ key = jax.random.PRNGKey(0)
 
 for name, design in [("low only", low_only), ("spread", spread)]:
     report = cdoe.evaluate_design(model, design, noise, key=key)
-    print(name, report.maximin, report.efficiency)
+    print(name)
+    print(report)
 ```
 
-Use the same `key` for every candidate so they are scored on the same prior draws.
+```text
+low only
+k_m   ±23% (×/÷1.25)  prior ±38%  efficiency 0.41
+kcat  ±18% (×/÷1.20)  prior ±38%  efficiency 0.53
+maximin 0.41 over 256/256 draws; ESS min 272, median 2328
+spread
+k_m   ±9% (×/÷1.09)  prior ±38%  efficiency 0.77
+kcat  ±6% (×/÷1.06)  prior ±38%  efficiency 0.85
+maximin 0.77 over 256/256 draws; ESS min 65, median 982
+```
+
+Each line gives the expected posterior uncertainty of a parameter after the experiment, its prior uncertainty and the efficiency. The numbers are also fields of the report: `report.relative_sd`, `report.prior_relative_sd`, `report.efficiency` and `report.maximin`. Use the same `key` for every candidate so they are scored on the same prior draws.
 
 To look at the information at a single parameter vector, the model's current values, use `fisher_information`:
 
@@ -115,15 +131,24 @@ result = cdoe.optimize_design(
 
 for measurement in result.dataset.measurements:
     print(measurement.initial_conditions)
-print(result.report.maximin, result.report.efficiency)
+print(result.report)
 print(result.restart_scores)
+```
+
+```text
+{'s': 39.836165272513284, 'p': 0.0, 'e': 0.1}
+{'s': 434.2062030861797, 'p': 0.0, 'e': 0.1}
+k_m   ±9% (×/÷1.10)  prior ±38%  efficiency 0.76
+kcat  ±6% (×/÷1.06)  prior ±38%  efficiency 0.84
+maximin 0.76 over 256/256 draws; ESS min 121, median 1167
+[0.7299377202785735, 0.7299377172551953, 0.729937718155289, 0.7299377204474838, 0.729937715188791, 0.7299377126379474, 0.7299377180622553, 0.7299377161258629]
 ```
 
 The **spec** maps every state and constant of the model to a range `(low, high)`. There are no defaults: an initial condition the spec leaves out is an error, whether it belongs to an enzyme, a substrate or a product. `low == high` fixes that initial condition at `low` in every arm; `low < high` lets every arm choose its own value inside the box. The **sampling times** are fixed: every arm is sampled at `times`. Optimising them tends to specialise the design toward the prior median and to give up the tails of the prior.
 
 The search runs `n_restarts` gradient ascents (Adam) from Latin-hypercube starts. Each ascent maximises a smoothed maximin over `n_draws` fixed prior draws, and the restarts are then ranked on the exact maximin over `n_rank_draws` separate draws. `result.report` scores the winner on a third set of draws, because the winner's score on the draws it was selected on is biased upwards. Restarts that fail to solve on any ranking draw are dropped, since averaging over only the draws that solved would reward a design for failing; if every restart fails, `optimize_design` raises and suggests narrowing the bounds, raising `max_steps` or using a stiff solver.
 
-**`restart_scores`** is the maximin of every restart on the ranking draws. When they agree, the landscape has one basin and the restarts were insurance. When some fall well short, the landscape has several basins and the restarts were necessary. In that case raise `n_restarts` and check that the best score holds up with a different `key`. Use at least a few restarts; a single ascent can settle in a poor basin.
+**`restart_scores`** is the maximin of every restart on the ranking draws, under the Laplace score the search uses, so it differs from `result.report.maximin`. The report also uses other draws than the `spread` example above. Scored on one `key`, the two designs are within 0.001 of each other, `spread` slightly ahead under the report: the hand-picked design was already close to the optimum, and at that distance the search's Laplace score and the reweighted report can disagree. To compare designs, score them all with `evaluate_design` on one `key`. When they agree, the landscape has one basin and the restarts were insurance. When some fall well short, the landscape has several basins and the restarts were necessary. In that case raise `n_restarts` and check that the best score holds up with a different `key`. Use at least a few restarts; a single ascent can settle in a poor basin.
 
 **Cost** is linear in the number of prior draws and in the number of restarts. One gradient step for a bi-substrate model (4 states, 4 arms × 9 times, CPU, float64):
 
@@ -137,7 +162,7 @@ Explore with 16 draws, and use more for the design you run in the lab.
 
 ## Closing the loop
 
-After round 1 has been measured, fit it with `run_mcmc` and design round 2 against the posterior instead of the priors. Pass the posterior samples as `belief`. `evaluate_design` and `optimize_design` then draw $\theta$ from those samples, with a bootstrap resample, and use their full log-space covariance as $\Sigma_0$. The correlations round 1 left in place are kept, for example a ridge between $k_\text{cat}$ and an inhibition constant. **Efficiency is then relative to the belief:** it is the shrinkage beyond what round 1 already taught, not beyond the priors.
+After round 1 has been measured, fit it with `run_mcmc` and design round 2 against the posterior instead of the priors. Pass the posterior samples as `belief`. `evaluate_design` and `optimize_design` then draw $\theta$ from those samples, with a bootstrap resample. The report weights all of the samples, and the search uses their full log-space covariance as $\Sigma_0$. The correlations round 1 left in place are kept, for example a ridge between $k_\text{cat}$ and an inhibition constant. **Efficiency is then relative to the belief:** it is the shrinkage beyond what round 1 already taught, not beyond the priors. A belief has far fewer samples than the 65,536 drawn from a prior, so its effective sample size is lower (`ESS min 7` above, see below); longer chains raise it.
 
 Until real data exists, round 1 can be simulated at the model's parameter values, with the same noise model the design was scored under. Continuing the Michaelis–Menten example:
 
@@ -177,12 +202,20 @@ round_2 = cdoe.optimize_design(
     n_draws=16,
     belief=fit_1.get_samples(),
 )
-print(round_2.report.efficiency)  # shrinkage beyond what round 1 taught
+print(round_2.report)  # shrinkage beyond what round 1 taught
 
 for meas in measure(round_2.dataset, jax.random.PRNGKey(4)).measurements:
     data.add_measurement(meas)
 fit_2 = cmc.run_mcmc(model, data, 0.5, mcmc_config)
 ```
+
+```text
+k_m   ±7% (×/÷1.07)  prior ±12%  efficiency 0.40
+kcat  ±5% (×/÷1.05)  prior ±9%  efficiency 0.43
+maximin 0.40 over 256/256 draws; ESS min 7, median 445
+```
+
+The "prior" column is now round 1's posterior. With 1,000 posterior samples, 5 of the 256 draws fell back to Laplace.
 
 With lab data, `data` is the measured `Dataset` instead, and nothing else changes. The simulated states that are not observable (`p` and `e` here) can stay in the data: `run_mcmc` fits the observable states only, and warns that the others are unused.
 
@@ -193,18 +226,34 @@ With lab data, `data` is the measured `Dataset` instead, and nothing else change
 - **Simulated data cannot detect a wrong rate law.** The data come from the model being fitted, so the fit is always consistent with it. Checking the mechanism needs real data.
 - **Rounds are not free.** In progress-doe, where this module was developed, greedy round-by-round designs lost to one joint design with the same total number of arms. The loop pays off when the prior turns out to be wrong, not by default.
 
-### How far to trust the efficiency numbers
+### How far to trust the numbers
 
-Every efficiency is a Laplace approximation. It was checked against NUTS posteriors of the bi-substrate model (enzyme as an unobservable state, `Proportional(0.05, 5)`, 6 time points, truth at the geometric midpoints of the priors). The noise was fixed at the truth in NUTS, and each cell gives the range over 3 noise seeds of the ratio of the Laplace posterior sd to the NUTS posterior sd, both in log space:
+The report was checked against NUTS posteriors of the bi-substrate model (enzyme as an unobservable state, `Uniform` priors, `Proportional(0.05, 5)`, 6 time points). The noise was fixed at the truth in NUTS. Ratio of the predicted posterior sd to the NUTS posterior sd, both in log space, for $k_\text{cat}$, $K_{i,u}$, $K_{m,A}$, $K_{m,B}$, with the truth at the geometric midpoints of the priors (mean over 3 noise seeds):
 
-| prior | arms | $k_\text{cat}$ | $K_{i,u}$ | $K_{m,A}$ | $K_{m,B}$ |
-|---|---|---|---|---|---|
-| Uniform | 4 | 0.67–0.73 | 0.68–0.73 | 0.83–0.85 | 0.77–0.86 |
-| Uniform | 16 (random) | 0.76–0.84 | 0.78–0.83 | 0.79–0.95 | 0.92–1.02 |
-| LogNormal | 4 | 0.93–0.98 | 0.93–0.96 | 1.00–1.03 | 0.99–1.08 |
-| LogNormal | 16 (random) | 0.92–1.00 | 0.94–0.98 | 0.92–1.06 | 1.04–1.10 |
+| score | 4 arms | 16 arms (random) |
+|---|---|---|
+| Laplace (the search) | 0.70 0.71 0.84 0.82 | 0.79 0.80 0.87 0.96 |
+| reweighted (the report) | 0.91 0.92 0.96 0.92 | 1.01 1.02 1.03 1.00 |
 
-The LogNormal prior was matched to each Uniform prior in the mean and variance of $\log\theta$. The posterior correlation of $\log k_\text{cat}$ and $\log K_{i,u}$ was −0.98 to −1.00 in every run, so the ridge is not what separates the rows. The prior is. A `LogNormal` prior is Gaussian in $\log\theta$, so the Laplace step uses it exactly, and the numbers hold to within about 10%. A `Uniform` prior has no curvature in $\log\theta$ inside its box, but the Laplace step replaces it with a Gaussian of the same log variance. That Gaussian has curvature the Uniform does not, so it adds prior precision that is not really there. The efficiencies are then **optimistic** wherever the prior still carries weight: the posterior sd came out 1.2–1.5× wider than predicted at 4 arms. The gap closes as the data come to dominate the prior, as at 16 arms. With a Uniform prior, rank designs by efficiency, but do not read the absolute numbers as promises until the design pins the parameters well below their prior width.
+Over 4 designs × 7 truths drawn from the priors:
+
+| | Laplace | reweighted |
+|---|---|---|
+| sd ratio to NUTS, 10–90% of cells | 0.81–1.55 | 0.84–1.12 |
+| bias in the worst parameter's efficiency | +0.036 | +0.030 |
+| rank of designs within a truth (Spearman) | 0.97 | 0.94 |
+
+Laplace errs in both directions: the round Gaussian it puts in place of the box constrains some directions too much and ignores the box's edges in others. With a `LogNormal` prior, which is Gaussian in $\log\theta$, the two scores agree.
+
+**Laplace finds the right design.** A search on the reweighted score landed in the same basin as the Laplace search, and under NUTS the two designs tied: −0.003 ± 0.007 in the worst parameter's efficiency over the 7 truths. Searching on the reweighted score gained nothing.
+
+**Check the effective sample size (ESS).** Each draw's posterior sd is a weighted average over prior samples, and the ESS counts how many samples effectively carry the weight. The sd's relative Monte Carlo error is about $1/\sqrt{2\,\text{ESS}}$: 7% at 100 and 22% at 10. A small ESS also biases the sd low, so the number becomes optimistic: with the bi-substrate design's noise divided by 4 (ESS below 10 in every draw), the sd came out at 0.88–0.92 of a converged reference, and with the noise divided by 16 at 0.29–0.50. This happens when a design pins the parameters far below their prior width, or with a belief made of few posterior samples. `report.ess_min` and `report.ess_median` show it, and `print(report)` prints both. There is no automatic switch to another estimator: any threshold for it would be arbitrary, and Laplace is not reliable there either. If the ESS is low, read the numbers as an upper bound on how well the parameters will be known; for a belief, run longer chains.
+
+What the report does not cover:
+
+- **The likelihood is linearised.** The reweighting uses the exact prior but a Gaussian likelihood built from $F$. On the bi-substrate model that left most predicted sds within about ±15% of NUTS. A model with stronger nonlinearity could do worse.
+- **The model and the noise model are assumed correct.** A wrong rate law or a wrong noise level makes every number wrong in ways the design cannot see.
+- **The truth is assumed inside the prior box.** The report averages over the priors. If the truth lies outside them, nothing here applies.
 
 ## Requirements on priors
 
@@ -214,7 +263,7 @@ The LogNormal prior was matched to each Uniform prior in the mean and variance o
 - `LogNormal`, `LogUniform`, and `TruncatedNormal` with `low > 0`: fine
 - `Normal`, or `Uniform`/`TruncatedNormal` with `low <= 0`: rejected with an error naming the parameter
 
-For `LogNormal` priors the prior variance of $\log\theta$ is exact; for all other priors it is estimated from 20,000 prior samples.
+The report weights 65,536 samples from these priors. The search needs only the prior variance of $\log\theta$, which is exact for `LogNormal` and estimated from 20,000 prior samples otherwise.
 
 ## Solver settings and failed simulations
 

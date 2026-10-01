@@ -36,7 +36,9 @@ class DesignResult:
             winner was selected on the ranking draws, which would bias its own
             score upwards there.
         restart_scores: Hard maximin of each restart's best point on the ranking
-            draws, NaN if a ranking draw failed to solve. A tight spread means
+            draws, NaN if a ranking draw failed to solve. It is the Laplace
+            score the search ranks by, so it differs from ``report.maximin``,
+            which is reweighted (see ``evaluate_design``). A tight spread means
             the restarts agree; a wide one means the landscape has several basins
             and the restarts were load-bearing.
     """

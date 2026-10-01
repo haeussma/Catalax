@@ -134,8 +134,10 @@ def test_efficiency_in_unit_interval_and_monotone_in_design():
     for report in (small, large):
         assert report.n_valid == report.n_draws == 32
         assert report.parameter_order == ["k_m", "kcat"]
-        assert all(0.0 <= e <= 1.0 for e in report.efficiency.values())
-        assert 0.0 <= report.maximin <= min(report.efficiency.values())
+        # No lower bound: Laplace kept e >= 0 by construction, the reweighted
+        # posterior does not (a near-uninformative MAT design came out at -0.009).
+        assert all(e <= 1.0 for e in report.efficiency.values())
+        assert report.maximin <= min(report.efficiency.values())
     assert large.maximin >= small.maximin
     assert all(large.efficiency[n] >= small.efficiency[n] for n in ["k_m", "kcat"])
 
