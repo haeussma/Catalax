@@ -20,7 +20,7 @@ Two noise models are provided. `Homoskedastic(sigma)` has a constant standard de
 
 ### Posterior shrinkage and efficiency
 
-Because $F$ depends on the unknown $\theta$, `evaluate_design` averages over draws $\theta_i$ from the prior. For each draw, the data are summarised by a Gaussian likelihood of $\log\theta$ with precision $F(\theta_i)$, centred where a noisy dataset would put it. That likelihood is combined with the **exact** prior by importance weights over 65,536 prior samples, and the posterior sd of each $\log\theta_j$ is the weighted sd of those samples. Averaged over the draws, this is the expected posterior sd after the experiment. It is reported as `relative_sd`: an sd of 0.21 in $\log\theta$ reads as about ±21% at one sd, or ×/÷ $e^{0.21} = 1.23$.
+Because $F$ depends on the unknown $\theta$, `evaluate_design` averages over draws $\theta_i$ from the prior. For each draw, the data are summarised by a Gaussian likelihood of $\log\theta$ with precision $F(\theta_i)$, centred where a noisy dataset would put it. That likelihood is combined with the **exact** prior by importance sampling: 65,536 samples from a proposal centred on the draw's posterior, weighted by prior × likelihood over the proposal's density, and the posterior sd of each $\log\theta_j$ is the weighted sd of those samples. Averaged over the draws, this is the expected posterior sd after the experiment. It is reported as `relative_sd`: an sd of 0.21 in $\log\theta$ reads as about ±21% at one sd, or ×/÷ $e^{0.21} = 1.23$.
 
 The **efficiency** of parameter $j$ is the fraction of its prior uncertainty the design removes:
 
@@ -84,11 +84,11 @@ for name, design in [("low only", low_only), ("spread", spread)]:
 low only
 k_m   ±23% (×/÷1.25)  prior ±38%  efficiency 0.41
 kcat  ±18% (×/÷1.20)  prior ±38%  efficiency 0.53
-maximin 0.41 over 256/256 draws; ESS min 272, median 2328
+maximin 0.41 over 256/256 draws; ESS min 9216, median 36412
 spread
 k_m   ±9% (×/÷1.09)  prior ±38%  efficiency 0.77
 kcat  ±6% (×/÷1.06)  prior ±38%  efficiency 0.85
-maximin 0.77 over 256/256 draws; ESS min 65, median 982
+maximin 0.77 over 256/256 draws; ESS min 5176, median 51173
 ```
 
 Each line gives the expected posterior uncertainty of a parameter after the experiment, its prior uncertainty and the efficiency. The numbers are also fields of the report: `report.relative_sd`, `report.prior_relative_sd`, `report.efficiency` and `report.maximin`. Use the same `key` for every candidate so they are scored on the same prior draws.
@@ -140,7 +140,7 @@ print(result.restart_scores)
 {'s': 434.20603317816995, 'p': 0.0, 'e': 0.1}
 k_m   ±9% (×/÷1.10)  prior ±38%  efficiency 0.76
 kcat  ±6% (×/÷1.06)  prior ±38%  efficiency 0.84
-maximin 0.76 over 256/256 draws; ESS min 121, median 1167
+maximin 0.76 over 256/256 draws; ESS min 6000, median 51805
 [0.7299377146478052, 0.7299377189625851, 0.729937724351732, 0.7299377210832458, 0.72993772109689, 0.7299377145330183, 0.7299377185526345, 0.7299377156301939]
 ```
 
@@ -164,7 +164,7 @@ Explore with 16 draws, and use more for the design you run in the lab.
 
 ## Closing the loop
 
-After round 1 has been measured, fit it with `run_mcmc` and design round 2 against the posterior instead of the priors. Pass the posterior samples as `belief`. `evaluate_design` and `optimize_design` then draw $\theta$ from those samples, with a bootstrap resample. The report weights all of the samples, and the search uses their full log-space covariance as $\Sigma_0$. The correlations round 1 left in place are kept, for example a ridge between $k_\text{cat}$ and an inhibition constant. **Efficiency is then relative to the belief:** it is the shrinkage beyond what round 1 already taught, not beyond the priors. A belief has far fewer samples than the 65,536 drawn from a prior, so its effective sample size is lower (`ESS min 7` above, see below); longer chains raise it.
+After round 1 has been measured, fit it with `run_mcmc` and design round 2 against the posterior instead of the priors. Pass the posterior samples as `belief`. `evaluate_design` and `optimize_design` then draw $\theta$ from those samples, with a bootstrap resample. The report weights all of the samples, and the search uses their full log-space covariance as $\Sigma_0$. The correlations round 1 left in place are kept, for example a ridge between $k_\text{cat}$ and an inhibition constant. **Efficiency is then relative to the belief:** it is the shrinkage beyond what round 1 already taught, not beyond the priors. A belief has samples but no density to build a proposal from, so the report weights the belief's own samples. Its effective sample size is therefore lower (`ESS min 3` above, see below); longer chains raise it.
 
 Until real data exists, round 1 can be simulated at the model's parameter values, with the same noise model the design was scored under. Continuing the Michaelis–Menten example:
 
@@ -210,12 +210,12 @@ fit_2 = cmc.run_mcmc(model, data, 0.5, mcmc_config)
 ```
 
 ```text
-k_m   ±7% (×/÷1.07)  prior ±12%  efficiency 0.40
-kcat  ±5% (×/÷1.05)  prior ±9%  efficiency 0.43
-maximin 0.40 over 256/256 draws; ESS min 7, median 445
+k_m   ±7% (×/÷1.08)  prior ±12%  efficiency 0.40
+kcat  ±5% (×/÷1.05)  prior ±9%  efficiency 0.41
+maximin 0.40 over 256/256 draws; ESS min 3, median 422
 ```
 
-The "prior" column is now round 1's posterior. With 1,000 posterior samples, 5 of the 256 draws fell back to Laplace.
+The "prior" column is now round 1's posterior. Its 1,000 samples (4 chains of 250) are the weighted samples themselves, so the ESS stays low here (min 3); longer chains raise it.
 
 With lab data, `data` is the measured `Dataset` instead, and nothing else changes. The simulated states that are not observable (`p` and `e` here) can stay in the data: `run_mcmc` fits the observable states only, and warns that the others are unused.
 
@@ -247,7 +247,7 @@ Laplace errs in both directions: the round Gaussian it puts in place of the box 
 
 **Laplace finds the right design.** A search on the reweighted score landed in the same basin as the Laplace search, and under NUTS the two designs tied: −0.003 ± 0.007 in the worst parameter's efficiency over the 7 truths. Searching on the reweighted score gained nothing.
 
-**Check the effective sample size (ESS).** Each draw's posterior sd is a weighted average over prior samples, and the ESS counts how many samples effectively carry the weight. The sd's relative Monte Carlo error is about $1/\sqrt{2\,\text{ESS}}$: 7% at 100 and 22% at 10. A small ESS also biases the sd low, so the number becomes optimistic: with the bi-substrate design's noise divided by 4 (ESS below 10 in every draw), the sd came out at 0.88–0.92 of a converged reference, and with the noise divided by 16 at 0.29–0.50. This happens when a design pins the parameters far below their prior width, or with a belief made of few posterior samples. `report.ess_min` and `report.ess_median` show it, and `print(report)` prints both. There is no automatic switch to another estimator: any threshold for it would be arbitrary, and Laplace is not reliable there either. If the ESS is low, read the numbers as an upper bound on how well the parameters will be known; for a belief, run longer chains.
+**Check the effective sample size (ESS).** Each draw's posterior sd is a weighted average over samples, and the ESS counts how many samples effectively carry the weight. The sd's relative Monte Carlo error is about $1/\sqrt{2\,\text{ESS}}$: 7% at 100 and 22% at 10. A small ESS also biases the sd low, so the number becomes optimistic. **With priors** the samples come from a proposal that follows each draw's posterior, so the ESS no longer falls as the design gets more informative. On competitive product inhibition with 2 to 6 arms (1,024 draws), its median stayed at 44,600–50,000 and its minimum at 510–870; weighting prior samples, the median had fallen from 78 to 11 and the minimum to 2. The ±% thus no longer turns optimistic as arms are added. Its worst case, at a box corner or with a near-singular $F$, is about that of weighting 3,277 prior samples. **With a belief** there is no density to follow, so the belief's own samples are weighted, and a design far more informative than round 1 lowers the ESS: with the bi-substrate design's noise divided by 4 (ESS below 10 in every draw), weighting samples gave 0.88–0.92 of a converged sd, and with the noise divided by 16 0.29–0.50. `report.ess_min` and `report.ess_median` show it, and `print(report)` prints both. There is no automatic switch to another estimator: any threshold for it would be arbitrary, and Laplace is not reliable there either. If the ESS is low, read the numbers as an upper bound on how well the parameters will be known, and run longer chains.
 
 What the report does not cover:
 

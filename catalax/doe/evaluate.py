@@ -25,6 +25,38 @@ if TYPE_CHECKING:
 _N_PRIOR_SAMPLES = 20_000
 _N_INNER_SAMPLES = 65_536
 _CHOLESKY_JITTER = 1e-6
+_PROPOSAL_SCALE = 1.25
+_DEFENSIVE_FRACTION = 0.05
+"""Scale ``c`` and prior fraction ``alpha`` of ``_proposal_sd``'s proposal.
+
+Both set the efficiency only, never the limit: the estimator is consistent
+for any ``c > 0`` and ``alpha >= 0``. Measured on competitive product
+inhibition (3 parameters, LogUniform priors spanning 40-100x, the 2- and
+6-arm designs of progress-doe's ``catalax_competitive_pi_arms.py``) and on
+the bi-substrate model (4 parameters, Uniform priors, a 4-arm optimum and
+16 random arms), 256 draws, M = 65536, 8 replicate keys. Per cell: the
+smallest ESS over draws (median over keys, worst workload), and in brackets
+the largest ``|ratio - 1| / SE`` over parameters and workloads, where ratio is
+the mean sd over draws against a reference at M = 4194304 (c = 1.75,
+alpha = 0.15, independent keys):
+
+====== ============= ============= =============
+c      alpha = 0.05  alpha = 0.1   alpha = 0.25
+====== ============= ============= =============
+1.0    379 (2.1)     365 (2.1)     307 (1.6)
+1.25   463 (1.9)     441 (1.8)     365 (2.2)
+1.5    387 (3.0)     371 (3.8)     319 (2.9)
+2.0    207 (1.6)     199 (1.6)     167 (1.4)
+====== ============= ============= =============
+
+At c = 1.25, alpha = 0.05 the median ESS was 44226, 49706, 26624 and 24708
+(CPI 2 and 6 arms, MAT 4 and 16) and every ratio within 1e-4 of 1; the
+mean absolute error of a single draw's sd was at most 0.36%. Prior sampling
+at the same M had a median ESS of 76, 11, 230 and 361, minimum 2-11, its
+mean sd 0.24-1.6% low (3.8-5.7 SE) and single draws 2.6-12% off; at
+M = 4194304 it was still 0.04-0.18% low, with a minimum ESS of 170 at 6
+arms.
+"""
 
 type EfficiencyFunction = Callable[[jax.Array, jax.Array], tuple[jax.Array, jax.Array]]
 """``(y0s, constants) -> (efficiency[n_draws, n_free], valid[n_draws])``."""
@@ -62,9 +94,13 @@ class DesignReport:
         ess_median: Median effective sample size over valid draws. The
             weighted sd of a draw has a relative Monte Carlo error of about
             ``1 / sqrt(2 * ESS)``: 7% at 100, 22% at 10. With a small ESS
-            the sd is also biased low, i.e. optimistic; see
-            ``_reweighted_sd``. More prior samples cannot fix that for a
-            design far more informative than the prior; judge it here.
+            the sd is also biased low, i.e. optimistic. Under priors the
+            samples follow each draw's posterior, so the ESS does not fall
+            with design quality: it is at most about 0.72 of the 65536
+            samples at 4 parameters, and in the worst case about that of
+            prior sampling with 3277 samples (see ``_proposal_sd``). With a
+            ``belief`` the samples are the belief's, so a design far more
+            informative than the belief lowers it; judge it here.
         n_draws: Number of draws from the priors or the belief.
         parameter_order: Names of the free parameters.
     """
@@ -110,10 +146,13 @@ def evaluate_design(
     For each draw ``theta_i`` from the free parameters' priors, the data are
     summarised by the Gaussian likelihood of ``log(theta)`` with precision
     ``F(theta_i)``, centred where a noisy dataset would put it. That likelihood
-    is combined with the *exact* prior by importance weights over prior
-    samples, and the posterior sd is the weighted sd of those samples (see
-    ``_reweighted_sd``). Averaged over the draws, this is the expected
-    posterior sd after the experiment.
+    is combined with the *exact* prior by importance sampling from a proposal
+    centred on the draw's Laplace posterior, and the posterior sd is the
+    weighted sd of those samples (see ``_proposal_sd``). Averaged over the
+    draws, this is the expected posterior sd after the experiment. The
+    proposal follows the posterior, so the ESS does not fall as designs
+    improve; weighting prior samples instead, it did, and the sd came out
+    optimistic.
 
     This report is not the search criterion. ``optimize_design`` searches on
     the Laplace posterior ``inv(F + inv(Sigma_0))``, which replaces a Uniform
@@ -138,8 +177,10 @@ def evaluate_design(
     With a ``belief`` (posterior samples from an earlier round), the draws are a
     bootstrap resample of those samples and the weights run over all of them,
     so correlations the earlier data left (a ridge between two parameters) are
-    kept. The efficiency is then relative to the belief. A belief has far fewer
-    samples than a prior draw set, so check ``ess_min``; longer chains raise it.
+    kept. The efficiency is then relative to the belief. A belief has samples
+    but no density, so its samples are the candidates themselves (see
+    ``_reweighted_sd``); they are far fewer than a proposal's, so check
+    ``ess_min``. Longer chains raise it.
 
     Args:
         model: Model whose free parameters (``constant=False``) all carry a prior
@@ -174,7 +215,7 @@ def evaluate_design(
     inner_key, z_key = jax.random.split(jax.random.fold_in(cov_key, 1))
     if belief is None:
         priors = _extract_priors(model, parameter_order)
-        keys = jax.random.split(inner_key, len(priors))
+        *keys, eps_key = jax.random.split(inner_key, len(priors) + 1)
         inner = jnp.log(
             jnp.stack(
                 [p.sample(k, (_N_INNER_SAMPLES,)) for p, k in zip(priors, keys)],
@@ -192,6 +233,28 @@ def evaluate_design(
 
         # lax.map, not vmap: vmapped weights are (n_draws, n_inner, n_free),
         # about 0.5 GB at 256 draws.
+        if belief is None:
+            n_prior = round(_DEFENSIVE_FRACTION * _N_INNER_SAMPLES)
+            moments = inner.mean(0), jnp.diag(1.0 / inner.var(0))
+            log_prior = _log_prior_density(priors)
+
+            def _proposal(args: tuple[jax.Array, ...]) -> tuple:
+                log_theta, z, f, i = args
+                # One block per draw, so the inner errors of the draws are
+                # independent and average out.
+                eps = jax.random.normal(
+                    jax.random.fold_in(eps_key, i),
+                    (_N_INNER_SAMPLES - n_prior, inner.shape[1]),
+                )
+                return _proposal_sd(
+                    log_theta, z, f, eps, inner[:n_prior], *moments, log_prior
+                )
+
+            sd, ess = jax.lax.map(
+                _proposal, (jnp.log(thetas), zs, F, jnp.arange(len(thetas)))
+            )
+            return sd, ess, valid
+
         def _one(args: tuple[jax.Array, jax.Array, jax.Array]) -> tuple:
             return _reweighted_sd(*args, inner)
 
@@ -282,7 +345,12 @@ def _reweighted_sd(
     F: jax.Array,
     inner: jax.Array,
 ) -> tuple[jax.Array, jax.Array]:
-    """Posterior sd of ``log(theta)`` from importance weights over prior samples.
+    """Posterior sd of ``log(theta)`` from importance weights over belief samples.
+
+    Used for a ``belief``, which has samples but no density to build a proposal
+    from. Under a prior, ``_proposal_sd`` replaced it; the measurements below
+    are of this estimator over prior samples, the M = 4096 / 65536 tables
+    included, and still describe it.
 
     The weight of inner sample ``u_k`` is the Gaussian likelihood
     ``exp(-1/2 ||L.T (u_k - log_theta) - z||^2)``, ``L L.T = F + 1e-6 I``: data
@@ -344,6 +412,117 @@ def _reweighted_sd(
     mean = w @ inner
     sd = jnp.sqrt(w @ (inner - mean) ** 2)
     return sd, 1.0 / jnp.sum(w**2)
+
+
+def _proposal_sd(
+    log_theta: jax.Array,
+    z: jax.Array,
+    F: jax.Array,
+    eps: jax.Array,
+    prior_inner: jax.Array,
+    mu0: jax.Array,
+    prec0: jax.Array,
+    log_prior: Callable[[jax.Array], jax.Array],
+) -> tuple[jax.Array, jax.Array]:
+    """Posterior sd of ``log(theta)`` under a prior, by importance sampling.
+
+    The prior-path twin of ``_reweighted_sd``: the same target, the exact
+    prior times the Gaussian likelihood ``exp(-1/2 ||L.T (u - log_theta) -
+    z||^2)`` with ``L L.T = F_J = F + 1e-6 I``, but the samples come from a
+    proposal that follows the posterior instead of from the prior. Prior
+    samples land in a posterior far narrower than the prior at a rate of about
+    ``prod(sd_post / sd_prior)``, so their ESS fell as designs improved (median
+    11, minimum 2 at 6 arms on competitive product inhibition), and a small ESS
+    biases the sd low.
+
+    The proposal is a defensive mixture (Hesterberg 1995) of ``n_g`` samples
+    from ``N(m, c^2 inv(P))`` and ``n_p`` prior samples. ``P = F_J + prec0``
+    and ``m = inv(P) (F_J u_hat + prec0 mu0)``, with ``u_hat = log_theta +
+    inv(L.T) z`` where the data put the estimate, make the Gaussian part the
+    Laplace posterior under the log prior's moments, widened by
+    ``c = _PROPOSAL_SCALE``. Its density
+    is weighted by the actual counts ``n_g / M`` and ``n_p / M``, which makes
+    this a deterministic-mixture estimator whose normaliser estimate is
+    unbiased (Owen & Zhou 2000); only the usual O(1/ESS) bias of
+    self-normalising remains. In ``u`` the target is a Gaussian cut off at the
+    prior's support (Uniform, LogUniform) or a Gaussian (LogNormal), so it has
+    no second mode to miss, and the Gaussian part is the exact posterior for
+    LogNormal at ``c = 1``. The ESS is at most about ``(1 - alpha) M
+    (sqrt(2 c^2 - 1) / c^2)^n_free``, 0.72 M at 4 parameters. The prior part,
+    ``alpha = _DEFENSIVE_FRACTION``, bounds the weights by ``M / n_p``, so the
+    worst case (a box corner, a near-singular ``F``) is about prior sampling
+    with ``n_p`` samples, not worse. Samples outside the prior's support get
+    weight 0. Measurements for ``c`` and ``alpha`` are with the constants.
+
+    Cost: ``evaluate_design`` with 1024 draws on the bi-substrate model (4
+    arms x 6 times, CPU, float64, M4 Pro) took 3.2-4.1 s per call including
+    the compile, against 1.4-2.0 s with prior sampling. About 1 s of the
+    difference is drawing the proposal's normals.
+
+    Args:
+        log_theta: ``log(theta_i)``, shape ``(n_free,)``.
+        z: Standard normal offset of the data, shape ``(n_free,)``.
+        F: Fisher information at ``theta_i``.
+        eps: Standard normals for the Gaussian part, shape ``(n_g, n_free)``.
+        prior_inner: Log prior samples for the prior part, ``(n_p, n_free)``.
+        mu0: Mean of the log prior, shape ``(n_free,)``.
+        prec0: Precision matrix of the log prior.
+        log_prior: Log prior density in ``u``, see ``_log_prior_density``.
+
+    Returns:
+        The posterior sd per parameter and the effective sample size
+        ``1 / sum(w**2)`` of the normalised weights.
+    """
+    n_free = F.shape[0]
+    n_gauss, n_prior = eps.shape[0], prior_inner.shape[0]
+    F_J = F + _CHOLESKY_JITTER * jnp.eye(n_free)
+    L = jnp.linalg.cholesky(F_J)
+    L_P = jnp.linalg.cholesky(F_J + prec0)
+    # F_J u_hat = F_J log_theta + L z; u_hat itself is ~1e3 in directions that
+    # only the jitter informs, so it is never formed.
+    m = jax.scipy.linalg.cho_solve((L_P, True), F_J @ log_theta + L @ z + prec0 @ mu0)
+    c = _PROPOSAL_SCALE
+    gauss = m + c * jax.scipy.linalg.solve_triangular(L_P.T, eps.T).T
+    u = jnp.concatenate([gauss, prior_inner])
+
+    log_gauss = (
+        -0.5 * jnp.sum(((u - m) @ L_P) ** 2, axis=-1) / c**2
+        + jnp.sum(jnp.log(jnp.diag(L_P)))
+        - n_free * (jnp.log(c) + 0.5 * jnp.log(2 * jnp.pi))
+    )
+    lp = log_prior(u)
+    n = n_gauss + n_prior
+    log_q = jnp.logaddexp(jnp.log(n_gauss / n) + log_gauss, jnp.log(n_prior / n) + lp)
+    residual = (u - log_theta) @ L - z
+    w = jax.nn.softmax(lp - 0.5 * jnp.sum(residual**2, axis=-1) - log_q)
+    mean = w @ u
+    sd = jnp.sqrt(w @ (u - mean) ** 2)
+    return sd, 1.0 / jnp.sum(w**2)
+
+
+def _log_prior_density(
+    priors: list[dist.Distribution],
+) -> Callable[[jax.Array], jax.Array]:
+    """``u -> log p(u)`` for ``u = log(theta)`` of shape ``(..., n_free)``.
+
+    The priors are independent; ``+ u`` is the Jacobian into log space. Outside
+    a prior's support the density is ``-inf``: numpyro's own ``log_prob`` is
+    finite there for ``Uniform`` and ``LogUniform``, and NaN at 0 for
+    ``LogNormal``.
+    """
+
+    def log_prior(u: jax.Array) -> jax.Array:
+        theta = jnp.exp(u)
+        return sum(
+            jnp.where(
+                prior.support(theta[..., j]),
+                prior.log_prob(theta[..., j]) + u[..., j],
+                -jnp.inf,
+            )
+            for j, prior in enumerate(priors)
+        )
+
+    return log_prior
 
 
 def _draws(
