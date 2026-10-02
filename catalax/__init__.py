@@ -1,3 +1,33 @@
+import os
+
+import jax
+
+
+def _usable_cores() -> int:
+    """The cores this process may run on: on a SLURM node, its job's, not the node's.
+
+    A Docker ``--cpus`` quota is not seen, hyperthreads count double on Linux
+    x86, and Apple efficiency cores count as cores.
+    """
+    if hasattr(os, "process_cpu_count"):  # Python 3.13+, honours affinity
+        return os.process_cpu_count() or 1
+    if hasattr(os, "sched_getaffinity"):  # Linux on 3.12 (SLURM, taskset)
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
+
+
+# One CPU device per core, so `run_mcmc(chain_method="parallel")` runs its chains
+# in parallel. Single-device code is unaffected (measured: 5.71 s at 1 and at 8
+# devices). The user's own setting wins: XLA_FLAGS or jax_num_cpu_devices set
+# before import.
+if jax.config.jax_num_cpu_devices == -1 and (
+    "xla_force_host_platform_device_count" not in os.environ.get("XLA_FLAGS", "")
+):
+    try:
+        jax.config.update("jax_num_cpu_devices", _usable_cores())
+    except RuntimeError:
+        pass  # JAX already ran an operation; its device count is fixed.
+
 import matplotlib as _mpl
 from sympy import Symbol  # noqa: F401
 
@@ -29,16 +59,29 @@ TIME = InAxes.TIME
 INITS = InAxes.Y0
 
 
-def set_host_count(n: int = 1):
+def set_host_count(n: int):
     """
-    Sets the number of hosts to be used by JAX for parallel execution.
+    Sets the number of CPU devices JAX uses, e.g. for parallel MCMC chains.
+
+    ``import catalax`` already sets one device per usable core, so call this only
+    to override that: right after ``import catalax``, before anything is simulated
+    or fitted. Importing submodules and building models do not start JAX, so their
+    order does not matter.
 
     Args:
-        n (int): The number of hosts to use. Defaults to 1.
-    """
-    import numpyro
+        n (int): The number of CPU devices.
 
-    numpyro.set_host_device_count(n)
+    Raises:
+        RuntimeError: If JAX has already run an operation, which fixes the count.
+    """
+    try:
+        jax.config.update("jax_num_cpu_devices", n)
+    except RuntimeError as error:
+        raise RuntimeError(
+            "JAX has already run an operation, so its device count is fixed. Call "
+            "ctx.set_host_count(n) right after `import catalax`, before simulating "
+            "or fitting; in a notebook, restart the kernel first."
+        ) from error
 
 
 def set_platform(platform: str = "cpu"):

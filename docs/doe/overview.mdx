@@ -136,12 +136,12 @@ print(result.restart_scores)
 ```
 
 ```text
-{'s': 39.836165272513284, 'p': 0.0, 'e': 0.1}
-{'s': 434.2062030861797, 'p': 0.0, 'e': 0.1}
+{'s': 39.83616504613273, 'p': 0.0, 'e': 0.1}
+{'s': 434.20603317816995, 'p': 0.0, 'e': 0.1}
 k_m   ±9% (×/÷1.10)  prior ±38%  efficiency 0.76
 kcat  ±6% (×/÷1.06)  prior ±38%  efficiency 0.84
 maximin 0.76 over 256/256 draws; ESS min 121, median 1167
-[0.7299377202785735, 0.7299377172551953, 0.729937718155289, 0.7299377204474838, 0.729937715188791, 0.7299377126379474, 0.7299377180622553, 0.7299377161258629]
+[0.7299377146478052, 0.7299377189625851, 0.729937724351732, 0.7299377210832458, 0.72993772109689, 0.7299377145330183, 0.7299377185526345, 0.7299377156301939]
 ```
 
 The **spec** maps every state and constant of the model to a range `(low, high)`. There are no defaults: an initial condition the spec leaves out is an error, whether it belongs to an enzyme, a substrate or a product. `low == high` fixes that initial condition at `low` in every arm; `low < high` lets every arm choose its own value inside the box. The **sampling times** are fixed: every arm is sampled at `times`. Optimising them tends to specialise the design toward the prior median and to give up the tails of the prior.
@@ -150,15 +150,17 @@ The search runs `n_restarts` gradient ascents (Adam) from Latin-hypercube starts
 
 **`restart_scores`** is the maximin of every restart on the ranking draws, under the Laplace score the search uses, so it differs from `result.report.maximin`. The report also uses other draws than the `spread` example above. Scored on one `key`, the two designs are within 0.001 of each other, `spread` slightly ahead under the report: the hand-picked design was already close to the optimum, and at that distance the search's Laplace score and the reweighted report can disagree. To compare designs, score them all with `evaluate_design` on one `key`. When they agree, the landscape has one basin and the restarts were insurance. When some fall well short, the landscape has several basins and the restarts were necessary. In that case raise `n_restarts` and check that the best score holds up with a different `key`. Use at least a few restarts; a single ascent can settle in a poor basin.
 
-**Cost** is linear in the number of prior draws and in the number of restarts. One gradient step for a bi-substrate model (4 states, 4 arms × 9 times, CPU, float64):
+**Cost** is linear in the number of prior draws and in the number of restarts. One gradient step for a bi-substrate model (4 states, 4 arms × 9 times, CPU, float64), and the whole search on an M4 Pro (14 cores):
 
 | `n_draws` | per step | 8 restarts × 300 steps | 24 restarts × 600 steps |
 |---|---|---|---|
-| 16 | 27 ms | ~1 min | 6.4 min |
-| 64 | 105 ms | ~4 min | 25 min |
-| 256 | 499 ms | 20 min | 2 h |
+| 16 | 27 ms | 13 s | 41 s |
+| 64 | 105 ms | 22 s | 70 s |
+| 256 | 499 ms | 80 s | 4.6 min |
 
 Explore with 16 draws, and use more for the design you run in the lab.
+
+**Cores.** The restarts run in parallel threads, `n_workers` of them, by default one per core up to `n_restarts`; the result does not depend on `n_workers`. The default counts the cores the process may use, so a SLURM job or `taskset` is honoured. A Docker `--cpus` quota is not: set `n_workers` and `ctx.set_host_count(n)` yourself there. On an Apple chip the efficiency cores count too but are slower, so set `n_workers` to the number of performance cores when `n_restarts` exceeds it.
 
 ## Closing the loop
 
@@ -182,8 +184,6 @@ def measure(design, key):
 mcmc_config = cmc.MCMCConfig(
     num_warmup=500,
     num_samples=250,
-    num_chains=4,
-    chain_method="parallel",
     likelihood=dist.Normal,
     noise_cv=0.1,  # HalfNormal scale of the fitted cv; covers the design's 0.05
     verbose=0,
@@ -221,7 +221,7 @@ With lab data, `data` is the measured `Dataset` instead, and nothing else change
 
 - **Refit all the data under the original priors.** Merge the rounds with `add_measurement` and fit once more. Do not turn the last posterior into the next prior: the posterior is only known through finite samples, and any prior fitted to them is an approximation that compounds over rounds.
 - **Match the likelihood to the design's noise model.** `likelihood=dist.Normal` with `noise_cv` set gives the floor-plus-proportional noise of `Proportional`, with the floor's scale from `yerrs`. The default `SoftLaplace` would only rescale the information, but it should still match.
-- **Parallel chains need the host count set before JAX starts.** Call `ctx.set_host_count(n)` at the very top of the script, before any JAX operation, and use `chain_method="parallel"`. Four chains of the bi-substrate model took 80 s in sequence and 30 s in parallel. Once JAX has started, the call has no effect.
+- **Chains run in parallel by default** (`num_chains=4`, `chain_method="parallel"`). `import catalax` sets one CPU device per core, so nothing else is needed. Four chains of the bi-substrate model took 80 s in sequence and 30 s in parallel. To choose the count yourself, call `ctx.set_host_count(n)` right after `import catalax`, before simulating or fitting; the order of imports does not matter. Called later, it raises.
 - **`constant=True` parameters** are held at their `value` by `catalax.doe`, but `run_mcmc` still samples them from their priors. Their posterior samples are ignored by `belief`.
 - **Simulated data cannot detect a wrong rate law.** The data come from the model being fitted, so the fit is always consistent with it. Checking the mechanism needs real data.
 - **Rounds are not free.** In progress-doe, where this module was developed, greedy round-by-round designs lost to one joint design with the same total number of arms. The loop pays off when the prior turns out to be wrong, not by default.

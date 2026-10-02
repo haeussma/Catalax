@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,7 @@ import numpy as np
 import optax
 from jax.typing import ArrayLike
 
+from catalax import _usable_cores
 from catalax.dataset.dataset import Dataset
 from catalax.doe.evaluate import DesignReport, _prepare_efficiency, evaluate_design
 from catalax.doe.noise import NoiseModel
@@ -64,6 +66,7 @@ def optimize_design(
     temperature: float = 0.01,
     config: SimulationConfig | None = None,
     belief: Mapping[str, ArrayLike] | None = None,
+    n_workers: int | None = None,
 ) -> DesignResult:
     """Finds the initial conditions that maximise the expected maximin efficiency.
 
@@ -97,17 +100,19 @@ def optimize_design(
         n_steps: Adam steps per restart.
         n_draws: Prior draws the ascent averages over. Cost is linear in draws
             and in restarts. One ``value_and_grad`` on the bi-substrate model
-            (4 states, 4 arms x 9 times, Tsit5, CPU, float64):
+            (4 states, 4 arms x 9 times, Tsit5, CPU, float64), and the whole
+            call with the default ``n_workers`` on an M4 Pro (14 cores):
 
             ===== ======== ====================== =======================
             draws per step 8 restarts x 300 steps 24 restarts x 600 steps
             ===== ======== ====================== =======================
-            16    27 ms    ~1 min                 6.4 min
-            64    105 ms   ~4 min                 25 min
-            256   499 ms   20 min                 2 h
+            16    27 ms    13 s                   41 s
+            64    105 ms   22 s                   70 s
+            256   499 ms   80 s                   4.6 min
             ===== ======== ====================== =======================
 
-            The first compile takes a few seconds.
+            Before the restarts ran in threads, the 8 x 300 column took 36 s
+            and 106 s. The first compile takes a few seconds.
         n_rank_draws: Prior draws the ranking and the report average over. The
             ranking runs once per restart, so it can afford more draws than the
             ascent.
@@ -120,6 +125,33 @@ def optimize_design(
         belief: Posterior samples of an earlier round to design against
             instead of the priors, e.g. ``run_mcmc(...).get_samples()``; see
             ``evaluate_design``. Every score is then relative to the belief.
+        n_workers: Threads that run the restarts, one jitted ascent each.
+            ``None`` means ``min(n_restarts, cores)``, counting the cores this
+            process may use: SLURM and ``taskset`` are honoured, a Docker
+            ``--cpus`` quota is not, so set it there. JAX releases the GIL while
+            compiled code runs, so threads run restarts in parallel, which
+            ``vmap`` on CPU does not. One-substrate MM model, 64 draws, 8
+            restarts x 40 steps, M4 Pro (10 performance + 4 efficiency cores):
+
+            ============= ======
+            restarts      time
+            ============= ======
+            ``vmap``      5.71 s
+            1 worker      5.85 s
+            4 workers     1.69 s
+            8 workers     0.93 s
+            10 workers    0.92 s
+            ============= ======
+
+            Efficiency cores count as cores but are slower: in progress-doe 12
+            workers on 10P+4E were slower than 8, and 24 restarts x 600 steps
+            above took 41 s with 14 workers and 40 s with 10. Set ``n_workers``
+            to the performance-core count when ``n_restarts`` exceeds it. The
+            result is bitwise the same for every ``n_workers``. It differs from
+            the earlier ``vmap`` path by roundoff, because XLA compiles a
+            batched ascent differently: 1e-14 relative on the bi-substrate
+            model, 1e-8 on a flat Michaelis-Menten ridge where the restarts
+            themselves agree only to 1e-8.
 
     Returns:
         A ``DesignResult``.
@@ -132,7 +164,11 @@ def optimize_design(
             score higher, so such restarts are dropped rather than ranked.
     """
     names = model.get_state_order() + model.get_constants_order()
-    _validate(spec, names, n_arms, n_restarts, n_steps, n_draws, n_rank_draws)
+    if n_workers is None:
+        n_workers = min(n_restarts, _usable_cores())
+    _validate(
+        spec, names, n_arms, n_restarts, n_steps, n_draws, n_rank_draws, n_workers
+    )
     free = [name for name in names if spec[name][0] < spec[name][1]]
 
     times = np.asarray(times, dtype=float).tolist()
@@ -203,11 +239,20 @@ def optimize_design(
         (_, _, _, best_z), _ = jax.lax.scan(step, init, length=n_steps)
         return best_z
 
+    def restart(z0: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
+        best_z = ascend(z0)
+        return best_z, *hard(best_z)
+
     unit = _latin_hypercube(start_key, n_restarts * n_arms, len(free))
     unit = jnp.clip(unit, _START_MARGIN, 1.0 - _START_MARGIN)
     starts = jnp.log(unit) - jnp.log1p(-unit)
-    best_z = jax.jit(jax.vmap(ascend))(starts.reshape(n_restarts, n_arms, len(free)))
-    scores, clean = jax.jit(jax.vmap(hard))(best_z)
+    starts = starts.reshape(n_restarts, n_arms, len(free))
+    # Compile once before the pool: workers that all hit the first call compile
+    # serially (progress-doe pitfall 6). JAX releases the GIL while compiled code
+    # runs, so threads run the restarts in parallel; `vmap` does not on CPU.
+    run = jax.jit(restart).lower(starts[0]).compile()
+    with ThreadPoolExecutor(n_workers) as pool:
+        best_z, scores, clean = map(jnp.stack, zip(*pool.map(run, starts)))
 
     restart_scores = [float(s) if c else math.nan for s, c in zip(scores, clean)]
     if not bool(clean.any()):
@@ -242,6 +287,7 @@ def _validate(
     n_steps: int,
     n_draws: int,
     n_rank_draws: int,
+    n_workers: int,
 ) -> None:
     """Checks the spec and the counts before anything is traced.
 
@@ -272,6 +318,7 @@ def _validate(
         "n_steps": n_steps,
         "n_draws": n_draws,
         "n_rank_draws": n_rank_draws,
+        "n_workers": n_workers,
     }
     for argument, value in counts.items():
         if value < 1:

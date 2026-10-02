@@ -202,8 +202,6 @@ hmc = HMC(
     num_warmup=1000,
     num_samples=2000,
     likelihood=dist.SoftLaplace,  # or dist.Normal
-    num_chains=4,
-    chain_method="parallel"
 )
 
 # Create experimental dataset

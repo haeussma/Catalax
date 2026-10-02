@@ -128,9 +128,7 @@ Configure the HMC sampler with appropriate settings for your system complexity a
 # Configure HMC sampler
 hmc = cmc.HMC(
     num_warmup=1000,        # Warmup samples to tune sampler
-    num_samples=2000,       # Posterior samples to collect
-    num_chains=4,           # Multiple chains for convergence assessment
-    chain_method="parallel", # Run chains in parallel for efficiency
+    num_samples=2000,       # Posterior samples to collect, per chain
     verbose=1               # Show progress during sampling
 )
 
@@ -148,7 +146,7 @@ Each configuration parameter affects the quality and efficiency of your inferenc
 
 - **`num_warmup`**: Adaptation period where the sampler learns optimal step sizes and mass matrix. Should be at least 500-1000 for complex models
 - **`num_samples`**: Number of posterior samples to collect. More samples provide better approximation of the posterior distribution
-- **`num_chains`**: Multiple independent chains enable convergence diagnostics. Use at least 2 chains, preferably 4 for robust assessment
+- **`num_chains`**: Multiple independent chains enable convergence diagnostics (R-hat). The default is 4, run in parallel (`chain_method="parallel"`): `import catalax` sets one CPU device per core. To choose the core count, call `ctx.set_host_count(n)` right after `import catalax`, before simulating or fitting
 - **`yerrs`**: Measurement error standard deviation. This should reflect the actual uncertainty in your experimental measurements
 
 **Advanced Configuration Options**
@@ -162,8 +160,6 @@ import numpyro.distributions as dist
 hmc = cmc.HMC(
     num_warmup=2000,
     num_samples=4000,
-    num_chains=4,
-    chain_method="parallel",
     likelihood=dist.SoftLaplace,  # Robust to outliers
     max_tree_depth=12,           # Allow longer trajectories
     dense_mass=True,             # Full mass matrix adaptation
@@ -278,7 +274,7 @@ Optimize your MCMC sampling for better performance:
 1. **Start with smaller samples**: Begin with fewer samples to identify and resolve convergence issues quickly
 2. **Use multiple chains**: Always run multiple chains to assess convergence and identify potential issues
 3. **Monitor diagnostics**: Pay attention to effective sample size and R-hat values throughout sampling
-4. **Parallelize when possible**: Use parallel chain execution to leverage multiple CPU cores
+4. **Keep chains parallel**: The 4 default chains run on separate CPU cores; on a GPU, which is one device, use `chain_method="vectorized"`
 
 ### Validation and Quality Control
 

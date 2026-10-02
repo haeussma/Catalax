@@ -47,7 +47,10 @@ class MCMCConfig:
         max_tree_depth: Maximum depth of NUTS binary tree (default: 10)
         dt0: Time step resolution for simulation (default: 0.1)
         chain_method: Chain execution method - "sequential", "parallel", or "vectorized"
-        num_chains: Number of Markov chains to run (default: 1)
+            (default: "parallel", one chain per CPU device; ``import catalax`` sets one
+            device per core, and with too few devices numpyro runs them in sequence)
+        num_chains: Number of Markov chains to run (default: 4, enough to compare
+            chains for convergence, R-hat)
         seed: Random seed for reproducibility (default: 420)
         verbose: Verbosity level; 0 for silent, 1 for progress (default: 1)
         max_steps: Maximum solver steps per solve (default: 4096, SimulationConfig's default,
@@ -73,8 +76,8 @@ class MCMCConfig:
     thinning: int = 1
     max_tree_depth: int = 10
     dt0: float = 0.1
-    chain_method: Literal["sequential", "parallel", "vectorized"] = "sequential"
-    num_chains: int = 1
+    chain_method: Literal["sequential", "parallel", "vectorized"] = "parallel"
+    num_chains: int = 4
     seed: int = 420
     verbose: int = 1
     max_steps: int = 4096
@@ -143,8 +146,8 @@ class HMC:
         thinning: int = 1,
         max_tree_depth: int = 10,
         dt0: float = 0.1,
-        chain_method: Literal["sequential", "parallel", "vectorized"] = "sequential",
-        num_chains: int = 1,
+        chain_method: Literal["sequential", "parallel", "vectorized"] = "parallel",
+        num_chains: int = 4,
         seed: int = 420,
         verbose: int = 1,
         max_steps: int = 4096,
@@ -164,7 +167,8 @@ class HMC:
             max_tree_depth: Maximum depth of NUTS binary tree
             dt0: Time step resolution for simulation
             chain_method: Chain execution method - "sequential", "parallel", or "vectorized"
-            num_chains: Number of Markov chains to run
+                (default: "parallel")
+            num_chains: Number of Markov chains to run (default: 4)
             seed: Random seed for reproducibility
             verbose: Verbosity level; 0 for silent, 1 for progress
             max_steps: Maximum number of integration steps

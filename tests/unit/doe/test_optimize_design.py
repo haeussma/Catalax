@@ -89,6 +89,22 @@ def test_same_key_gives_the_same_design():
     assert first.restart_scores == second.restart_scores
 
 
+def test_worker_count_does_not_change_the_result():
+    model = _mm_model()
+    serial, threaded = (
+        cdoe.optimize_design(
+            model, SPEC, NOISE, key=jax.random.PRNGKey(3), n_workers=n, **SEARCH
+        )
+        for n in (1, 4)
+    )
+    np.testing.assert_array_equal(
+        _initial_conditions(serial.dataset, "s"),
+        _initial_conditions(threaded.dataset, "s"),
+    )
+    assert serial.restart_scores == threaded.restart_scores
+    assert serial.report == threaded.report
+
+
 def test_dataset_round_trips_through_evaluate_design():
     model = _mm_model()
     result = cdoe.optimize_design(
@@ -114,8 +130,9 @@ def test_dataset_round_trips_through_evaluate_design():
         ({**SPEC, "s": (1000.0, 10.0)}, {}, r"spec\['s'\]"),
         ({**SPEC, "s": (10.0, 10.0)}, {}, "evaluate_design"),
         (SPEC, {"n_restarts": 0}, "n_restarts"),
+        (SPEC, {"n_workers": 0}, "n_workers"),
     ],
-    ids=["missing", "unknown", "low>high", "no-free", "n_restarts"],
+    ids=["missing", "unknown", "low>high", "no-free", "n_restarts", "n_workers"],
 )
 def test_invalid_input_names_the_culprit(spec, kwargs, match):
     with pytest.raises(ValueError, match=match):

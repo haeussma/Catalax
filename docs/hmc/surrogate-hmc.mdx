@@ -178,8 +178,7 @@ Surrogate acceleration enables previously impractical inference studies:
 large_scale_hmc = cmc.HMC(
     num_warmup=10_000,
     num_samples=1_000_000,  # One million samples
-    num_chains=10,          # Parallel chains
-    chain_method="parallel"
+    num_chains=10,          # Parallel chains, one per CPU core
 )
 
 # This completes in minutes rather than weeks
@@ -238,7 +237,6 @@ parallel_hmc = cmc.HMC(
     num_warmup=5000,
     num_samples=100_000,
     num_chains=8,               # Multiple parallel chains
-    chain_method="parallel"     # Enable parallel execution
 )
 
 # Each chain runs independently with shared surrogate model
