@@ -474,8 +474,8 @@ Catalax builds on the excellent work of:
 
 ## 📞 Support
 
-- 💬 [Discussions](https://github.com/JR-1991/Catalax/discussions)
-- 🐛 [Issues](https://github.com/JR-1991/Catalax/issues)
+- 💬 [Discussions](https://github.com/haeussma/Catalax/discussions)
+- 🐛 [Issues](https://github.com/haeussma/Catalax/issues)
 
 ---
 
