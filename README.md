@@ -63,11 +63,11 @@ Check out the [documentation](https://catalax.mintlify.app/) for more details.
 ## 🛠️ Installation
 
 ```bash
-# Install from PyPI
-pip install catalax
+# Install from GitHub
+pip install git+https://github.com/haeussma/Catalax.git
 
 # Or from source
-git clone https://github.com/JR-1991/Catalax.git
+git clone https://github.com/haeussma/Catalax.git
 cd Catalax
 pip install .
 ```
@@ -337,7 +337,7 @@ Explore comprehensive examples in the `examples/` directory:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/JR-1991/Catalax.git
+   git clone https://github.com/haeussma/Catalax.git
    cd Catalax
    ```
 
