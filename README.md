@@ -18,6 +18,7 @@ Catalax combines the power of **JAX** with advanced numerical methods for bioche
 - **⚡ Lightning-fast simulations** with JIT compilation and GPU acceleration
 - **🧠 Neural ODEs** for data-driven discovery of biochemical dynamics  
 - **🎯 Bayesian parameter inference** using Hamiltonian Monte Carlo
+- **🧪 Optimal experimental design** to plan informative experiments before the lab
 - **📊 Comprehensive model analysis** with fit metrics and model comparison
 - **🔬 Biochemical data integration** with EnzymeML support
 
@@ -45,6 +46,13 @@ Check out the [documentation](https://catalax.mintlify.app/) for more details.
 - Surrogate-accelerated inference using neural networks
 - Uncertainty quantification with HDI intervals
 - Prior specification and model comparison tools
+
+### 🧪 **Experimental Design**
+
+- Score candidate experiments by expected parameter uncertainty before running them
+- Optimize initial conditions for the most informative design
+- Homoskedastic and proportional noise models
+- Sequential design: plan the next round against an MCMC posterior
 
 ### 📊 **Model Analysis**
 
@@ -231,6 +239,73 @@ fig4 = results.plot_credibility_interval(
 
 # Get summary statistics
 summary_stats = results.summary(hdi_prob=0.95)
+```
+
+</details>
+
+### 4. **Experimental Design**
+
+Plan experiments that pin down your parameters before spending time at the bench. Given a model with priors, `catalax.doe` predicts how much a candidate design (which initial conditions to prepare and when to sample) will shrink the uncertainty of each kinetic parameter, and can search for the design that leaves no parameter poorly determined. See the [experimental design guide](docs/doe/overview.mdx) for the details.
+
+**Key features:**
+
+- **Expected posterior uncertainty** per parameter, reported as ±% and as efficiency relative to the prior
+- **Maximin optimization** of initial conditions with parallel multistart gradient search
+- **Noise models** for constant (`Homoskedastic`) and proportional (`Proportional`) measurement error
+- **Closed-loop design** that plans round 2 against the posterior of a fitted round 1
+
+<details>
+<summary><strong>🧪 Click to see experimental design code</strong></summary>
+
+```python
+import jax
+import catalax as ctx
+import catalax.doe as cdoe
+from catalax.mcmc.priors import Uniform
+
+ctx.enable_x64()  # Fisher matrices need double precision
+
+# Michaelis-Menten model where only the substrate is measured
+model = ctx.Model(name="Michaelis-Menten")
+model.add_state("s, p, e")
+model.add_ode("s", "-kcat * e * s / (k_m + s)", observable=True)
+model.add_ode("p", "kcat * e * s / (k_m + s)", observable=False)
+model.add_ode("e", "0", observable=False)
+
+# Priors describe what you know before the experiment
+model.parameters["kcat"].value = 10.0
+model.parameters["kcat"].prior = Uniform(low=5.0, high=20.0)
+model.parameters["k_m"].value = 100.0
+model.parameters["k_m"].prior = Uniform(low=50.0, high=200.0)
+
+# A candidate design: one arm per initial condition, sampled at `times`
+times = [10.0, 40.0, 80.0, 150.0, 300.0]
+design = ctx.Dataset.from_model(model)
+design.add_initial(time=times, s=50.0, p=0.0, e=0.1)
+design.add_initial(time=times, s=400.0, p=0.0, e=0.1)
+
+# Score it: expected posterior uncertainty per parameter
+noise = cdoe.Proportional(cv=0.05, floor=0.5)
+report = cdoe.evaluate_design(model, design, noise, key=jax.random.PRNGKey(0))
+print(report)
+# k_m   ±9% (×/÷1.09)  prior ±38%  efficiency 0.77
+# kcat  ±6% (×/÷1.06)  prior ±38%  efficiency 0.85
+
+# Or let Catalax find the best substrate concentrations for two arms
+result = cdoe.optimize_design(
+    model,
+    spec={"s": (10.0, 1000.0), "p": (0.0, 0.0), "e": (0.1, 0.1)},
+    noise=noise,
+    n_arms=2,
+    times=times,
+    key=jax.random.PRNGKey(1),
+    n_draws=16,
+)
+
+# The optimized design is a Dataset, ready for the lab
+for measurement in result.dataset.measurements:
+    print(measurement.initial_conditions)  # s ≈ 40 and s ≈ 434
+print(result.report)
 ```
 
 </details>
