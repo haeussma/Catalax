@@ -49,7 +49,13 @@ requires = ["hatchling"]
 markers = ["expensive: slow tests, deselect with -m \"not expensive\""]
 
 [tool.ruff.lint]
+# Pin the classic default set; ruff 0.16 widened its defaults (UP, I, RUF, ...).
+select = ["E4", "E7", "E9", "F"]
 ignore = ["E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# JAX device count must be configured before the package imports run.
+"catalax/__init__.py" = ["E402"]
 
 [tool.setuptools.packages.find]
 where = ["catalax"]
