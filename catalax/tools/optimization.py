@@ -32,6 +32,9 @@ def optimize(
     given instead as ``objective_fun(y_true, y_pred)`` returning a non-negative array;
     the fit then minimises the sum of that loss over the measured points.
 
+    The standard errors in the result are meaningful only for the default least-squares
+    objective; with a custom ``objective_fun`` they come from the Jacobian of ``sqrt(loss)``.
+
     The returned model is a modified COPY of the input model carrying the fitted
     parameter values; the input model is not changed.
 
@@ -48,7 +51,9 @@ def optimize(
         objective_fun (Optional[Callable], optional): Per-point loss
             ``(y_true, y_pred) -> array``. Defaults to None (least squares).
         max_steps (int, optional): Maximum number of integration steps. Defaults to 64**4.
-        method (str, optional): lmfit method. Defaults to "least_squares".
+        method (str, optional): lmfit method. Defaults to "least_squares". Gradient-based
+            scalar methods (e.g. ``lbfgsb``, ``bfgs``) need ``ctx.enable_x64()``: their
+            finite-difference steps cannot be resolved in float32.
 
     Returns:
         Tuple[MinimizerResult, Model]: lmfit result and the fitted copy of the model.
@@ -61,10 +66,18 @@ def optimize(
     measured = ~jnp.isnan(data)
 
     fit_kws = {}
+    # The finite-difference step must exceed the accumulated rounding error of the ODE
+    # simulation, or the Jacobian (and so the reported standard errors, and the point where
+    # the fit stops) is noise: in float32 scipy's default 1.5e-8 cannot be resolved, and the
+    # naive sqrt(eps) (3.5e-4) is still too small for nonlinear ODEs. The cube root of eps is
+    # the standard step for central differences, whose truncation error is O(h^2).
+    step = float(jnp.finfo(data.dtype).eps) ** (1 / 3)
     if method == "least_squares":
-        # The finite-difference step must exceed the simulation's float precision: in float32
-        # (Catalax's default) scipy's default relative step of 1.5e-8 cannot be resolved.
-        fit_kws["diff_step"] = float(jnp.finfo(data.dtype).eps) ** 0.5
+        fit_kws["diff_step"] = step
+        fit_kws["jac"] = "3-point"
+    elif method == "leastsq":
+        # MINPACK forward-differences with a step of sqrt(epsfcn) * |x|.
+        fit_kws["epsfcn"] = step**2
 
     config = dataset.to_config()
     config.dt0 = dt0

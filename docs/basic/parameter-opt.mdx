@@ -72,6 +72,8 @@ data (unsampled points, padding of shorter measurements) are left out of the fit
 another per-point loss, pass `objective_fun(y_true, y_pred)` returning a non-negative array,
 e.g. `objective_fun=ctx.l1_loss`; the fit then minimises the sum of that loss.
 
+The standard errors in the result are meaningful only for the default least-squares objective; with a custom `objective_fun` they come from the Jacobian of `sqrt(loss)`. Gradient-based scalar lmfit methods (e.g. `lbfgsb`, `bfgs`) need `ctx.enable_x64()` because their finite-difference steps cannot be resolved in float32.
+
 ## Model selection
 
 Model selection is a crucial step in parameter estimation that helps identify the most appropriate model structure for a given dataset. Catalax provides several metrics to assist with model selection, including:

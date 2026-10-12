@@ -100,7 +100,9 @@ def test_hidden_state_needs_no_data():
 
     dataset = ctx.Dataset.from_model(model)
     dataset.add_initial(S=2.0, P=0.0)
-    dataset = model.simulate(dataset=dataset, config=ctx.SimulationConfig(t1=10, nsteps=6))
+    dataset = model.simulate(
+        dataset=dataset, config=ctx.SimulationConfig(t1=10, nsteps=6)
+    )
     for measurement in dataset.measurements:
         measurement.data.pop("S")
 
@@ -117,5 +119,69 @@ def test_nan_points_are_left_out():
     result, _ = ctx.optimize(model, dataset)
 
     assert result.ndata == 5  # dropped, not counted as a zero residual
-    assert result.params["k"].value == pytest.approx(least_squares_slope(dataset), rel=1e-4)
-    assert result.params["k"].stderr == pytest.approx(least_squares_stderr(dataset), rel=1e-2)
+    assert result.params["k"].value == pytest.approx(
+        least_squares_slope(dataset), rel=1e-4
+    )
+    assert result.params["k"].stderr == pytest.approx(
+        least_squares_stderr(dataset), rel=1e-2
+    )
+
+
+def michaelis_menten_problem() -> tuple[ctx.Model, ctx.Dataset]:
+    """Substrate S (hidden) -> product P, rate kcat·S/(Km+S)·Co/(Kc+Co); only P is measured.
+
+    Six measurements (2 initial substrate x 3 catalyst concentrations) of six points each,
+    true kcat=10, Km=0.5, Kc=3e-4, plus fixed sinusoidal noise of amplitude 0.01.
+    """
+    model = ctx.Model(name="michaelis-menten x catalyst")
+    model.add_state("S, P")
+    model.add_constant("Co")
+    model.add_ode("S", "-kcat * S / (Km + S) * Co / (Kc + Co)", observable=False)
+    model.add_ode("P", "kcat * S / (Km + S) * Co / (Kc + Co)")
+    for name, value in dict(kcat=10.0, Km=0.5, Kc=3e-4).items():
+        model.parameters[name].value = value
+
+    dataset = ctx.Dataset.from_model(model)
+    for s0 in [0.2, 1.0]:
+        for co in [5e-5, 2e-4, 1e-3]:
+            dataset.add_initial(S=s0, P=0.0, Co=co)
+    dataset = model.simulate(
+        dataset=dataset, config=ctx.SimulationConfig(t1=2.0, nsteps=6)
+    )
+    for i, measurement in enumerate(dataset.measurements):
+        noise = 0.01 * np.sin(1.3 * np.arange(6) + 0.5 + i)
+        measurement.data["P"] = measurement.data["P"] + noise
+        measurement.data.pop("S")
+
+    initial = dict(kcat=(3.0, 1.0, 100.0), Km=(1.0, 1e-3, 50.0), Kc=(1e-3, 1e-6, 0.1))
+    for name, (start, lower, upper) in initial.items():
+        parameter = model.parameters[name]
+        parameter.value = None
+        parameter.initial_value = start
+        parameter.lower_bound = lower
+        parameter.upper_bound = upper
+    return model, dataset
+
+
+# Reference fit in float64: computed once in a separate process that called
+# ctx.enable_x64() before any other JAX work, running ctx.optimize (default method,
+# float64 data) on michaelis_menten_problem(); values (value, stderr) per parameter.
+MM_REFERENCE = {
+    "kcat": (8.88657, 0.6329),
+    "Km": (0.41374, 0.0412),
+    "Kc": (0.000288777, 1.743e-05),
+}
+
+
+def test_float32_fit_matches_float64_on_nonlinear_ode():
+    """The finite-difference Jacobian of a float32 ODE fit must be as good as float64's.
+
+    With a step too small for the simulation's rounding noise the fit stops early and the
+    standard errors come out 25-35 % too small.
+    """
+    model, dataset = michaelis_menten_problem()
+    result, _ = ctx.optimize(model, dataset)
+    for name, (value, stderr) in MM_REFERENCE.items():
+        fitted = result.params[name]
+        assert fitted.stderr == pytest.approx(stderr, rel=0.05), name
+        assert abs(fitted.value - value) < 0.3 * stderr, name
