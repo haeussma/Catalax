@@ -482,7 +482,9 @@ class Measurement(BaseModel):
         pad_len = global_max_len - len(canonical_np)
         if pad_len > 0:
             start = canonical_np[-1] + 1.0 if canonical_np.size > 0 else 0.0
-            extension = np.arange(start, start + pad_len, 1.0)
+            # Count the steps: arange(start, start + pad_len) can yield pad_len + 1
+            # values for a fractional start (e.g. 7.03 + 3.0 rounds below 10.03).
+            extension = start + np.arange(pad_len)
             canonical_np = np.concatenate([canonical_np, extension])
             data_dict = {
                 sid: jnp.concatenate([arr, jnp.full(pad_len, jnp.nan)])

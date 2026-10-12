@@ -67,6 +67,14 @@ class TestPadSpeciesArrays:
         assert jnp.isnan(data["s1"][3])   # data padded with NaN
         assert jnp.isnan(data["s1"][4])
 
+    def test_padding_length_exact_for_fractional_last_time(self):
+        """A fractional last time point must not add an extra padded time step."""
+        meas = _make_pe_measurement([
+            {"species_id": "s1", "initial": 4.0, "data": [4.0, 3.8, 3.4], "time": [0.0, 2.82, 6.03]},
+        ])
+        time, data = Measurement._pad_species_arrays(meas, global_max_len=6)
+        assert len(time) == len(data["s1"]) == 6
+
     def test_raises_when_species_time_not_subset(self):
         """Raises ValueError when a species has time points outside the canonical axis."""
         meas = _make_pe_measurement([
