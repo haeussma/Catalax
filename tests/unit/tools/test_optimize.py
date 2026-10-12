@@ -106,3 +106,16 @@ def test_hidden_state_needs_no_data():
 
     result, _ = ctx.optimize(model, dataset)
     assert result.params["k"].value == pytest.approx(0.3, rel=1e-3)
+
+
+def test_nan_points_are_left_out():
+    """A NaN data point is skipped: the fit equals least squares over the other points."""
+    model, dataset = linear_problem()
+    measurement = dataset.measurements[0]
+    measurement.data["P"] = measurement.data["P"].at[3].set(jnp.nan)
+
+    result, _ = ctx.optimize(model, dataset)
+
+    assert result.ndata == 5  # dropped, not counted as a zero residual
+    assert result.params["k"].value == pytest.approx(least_squares_slope(dataset), rel=1e-4)
+    assert result.params["k"].stderr == pytest.approx(least_squares_stderr(dataset), rel=1e-2)
