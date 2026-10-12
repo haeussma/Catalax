@@ -87,3 +87,22 @@ def test_reducing_objective_is_rejected():
     model, dataset = linear_problem()
     with pytest.raises(ValueError, match="one loss per data point"):
         ctx.optimize(model, dataset, objective_fun=ctx.mean_absolute_error)
+
+
+def test_hidden_state_needs_no_data():
+    """S -> P with only P measured: S has an initial condition but no data array."""
+    model = ctx.Model(name="hidden substrate")
+    model.add_state("S, P")
+    model.add_ode("S", "-k * S", observable=False)
+    model.add_ode("P", "k * S")
+    model.parameters["k"].value = 0.3
+    _bound(model, "k", initial=0.1)
+
+    dataset = ctx.Dataset.from_model(model)
+    dataset.add_initial(S=2.0, P=0.0)
+    dataset = model.simulate(dataset=dataset, config=ctx.SimulationConfig(t1=10, nsteps=6))
+    for measurement in dataset.measurements:
+        measurement.data.pop("S")
+
+    result, _ = ctx.optimize(model, dataset)
+    assert result.params["k"].value == pytest.approx(0.3, rel=1e-3)
