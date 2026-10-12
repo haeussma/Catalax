@@ -712,13 +712,14 @@ class Measurement(BaseModel):
         if xlim:
             ax.set_xlim(xlim[0], xlim[1])
 
-        if self.data:
-            ymax = max(
-                np.nanmax(series)
-                for series in self.data.values()
-                if len(series) > 0 and not np.all(np.isnan(series))
-            )
-            ax.set_ylim(0, ymax * 1.1)
+        # The y-range spans everything drawn (data, model, HDI bands), from 0 unless
+        # something is negative, with 10 % headroom.
+        y_low, y_high = ax.dataLim.y0, ax.dataLim.y1
+        if np.isfinite(y_low) and np.isfinite(y_high):
+            y_low, y_high = min(0.0, y_low), max(0.0, y_high)
+            if y_high > y_low:
+                headroom = 0.1 * (y_high - y_low)
+                ax.set_ylim(y_low - headroom if y_low < 0 else 0.0, y_high + headroom)
 
         # Create custom legend with HDI handles
         handles, labels = ax.get_legend_handles_labels()
