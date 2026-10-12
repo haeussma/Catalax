@@ -3,7 +3,7 @@ from typing import Callable, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
-import optax
+import numpy as np
 from lmfit import Parameters, minimize
 from lmfit.minimizer import MinimizerResult
 
@@ -17,50 +17,55 @@ def optimize(
     global_upper_bound: Optional[float] = 1e5,
     global_lower_bound: Optional[float] = 1e-6,
     dt0: float = 0.01,
-    objective_fun: Callable = optax.l2_loss,  # type: ignore
+    objective_fun: Optional[Callable[[jax.Array, jax.Array], jax.Array]] = None,
     max_steps: int = 64**4,
-    method: str = "bfgs",
+    method: str = "least_squares",
 ) -> Tuple[MinimizerResult, Model]:
-    """Optimization functions to determine the parameters of a model of a system, given data.
+    """Fit the parameters of a model to a dataset with lmfit.
 
-    This method uses the LMFit library to perform parameter inference and thus
-    supports all methods provided by LMFit.
+    Only the model's observable states are compared with data (states whose ODE was
+    added with ``observable=False`` need initial conditions, not data), and NaN entries
+    in the data (unsampled points, padding of shorter measurements) are left out.
 
-    In order to perform an optimization, first specify your ODE model and configure
-    the parameter objects in your model. This means to add a lower and upper bound
-    for each parameter. You can also set a global upper/lower bound if you want to
-    use the same bounds for all parameters. When you pass the model to this function,
-    everything will be setup and a parameter optimization will be performed.
+    By default this is ordinary least squares: lmfit receives the residual vector
+    ``simulation - data`` and minimises its sum of squares. A per-point loss can be
+    given instead as ``objective_fun(y_true, y_pred)`` returning a non-negative array;
+    the fit then minimises the sum of that loss over the measured points.
 
-    This function returns a results object as well as an update version of your model
-    including the inferred parameters. Please note, that the returned model is a modified
-    COPY of your input system plus the parameter values. The input system will not be modified.
+    The returned model is a modified COPY of the input model carrying the fitted
+    parameter values; the input model is not changed.
 
     Args:
-        model (Model): The model to fit.
-        dataset (Dataset): The dataset to fit the model to.
-        global_upper_bound (Optional[float], optional): Global upper bound - Only applies to unspecified params. Defaults to 1e5.
-        global_lower_bound (Optional[float], optional): Global lower bound - Only applies to unspecified params. Defaults to 1e-6.
+        model (Model): The model to fit. Every parameter needs an initial value, and
+            bounds unless the global bounds apply.
+        dataset (Dataset): Data for every observable state of the model, plus initial
+            conditions for all states and constants.
+        global_upper_bound (Optional[float], optional): Upper bound for parameters
+            without their own. Defaults to 1e5.
+        global_lower_bound (Optional[float], optional): Lower bound for parameters
+            without their own. Defaults to 1e-6.
         dt0 (float, optional): Integration step width. Defaults to 0.01.
+        objective_fun (Optional[Callable], optional): Per-point loss
+            ``(y_true, y_pred) -> array``. Defaults to None (least squares).
         max_steps (int, optional): Maximum number of integration steps. Defaults to 64**4.
-        method (str, optional): Optimization method. Defaults to "bfgs".
+        method (str, optional): lmfit method. Defaults to "least_squares".
 
     Returns:
-        Tuple[MinimizerResult, Model]: Results object and updated model with inferred parameters
+        Tuple[MinimizerResult, Model]: lmfit result and the fitted copy of the model.
     """
 
     params = _initialize_params(model, global_upper_bound, global_lower_bound)
-    dataset_observables = dataset.get_observable_states_order()
-    observables = [
-        index
-        for index, state in enumerate(model.get_state_order())
-        if state in dataset_observables
-    ]
 
-    # Extract data arrays for the residual computation
-    data, times, _ = dataset.to_jax_arrays(model.get_state_order())
+    data, times, _ = dataset.to_jax_arrays(model.get_observable_state_order())
+    observed = jnp.array(model.get_observable_state_order(as_indices=True))
+    measured = ~jnp.isnan(data)
 
-    # Create simulation config from dataset
+    fit_kws = {}
+    if method == "least_squares":
+        # The finite-difference step must exceed the simulation's float precision: in float32
+        # (Catalax's default) scipy's default relative step of 1.5e-8 cannot be resolved.
+        fit_kws["diff_step"] = float(jnp.finfo(data.dtype).eps) ** 0.5
+
     config = dataset.to_config()
     config.dt0 = dt0
     config.max_steps = max_steps
@@ -72,7 +77,8 @@ def optimize(
         config,
         data,
         times,
-        observables,
+        observed,
+        measured,
         objective_fun,
     )
 
@@ -83,6 +89,7 @@ def optimize(
         params,
         args=minimize_args,
         method=method,
+        **fit_kws,
     )
 
     _ipython_flush()
@@ -172,30 +179,31 @@ def _residual(
     config: SimulationConfig,
     data: jax.Array,
     times: jax.Array,
-    observables: jax.Array,
-    objective_fun: Callable[[jax.Array, jax.Array], float],
-):
-    """Performs a simulation of the model and returns the residual between the
-    data and the simulation.
+    observed: jax.Array,
+    measured: jax.Array,
+    objective_fun: Optional[Callable[[jax.Array, jax.Array], jax.Array]],
+) -> np.ndarray:
+    """Residual vector over the measured points of the observable states.
 
     Args:
-        params (Parameters): Parameters to optimize.
-        model (Model): Model to used to simulate the data.
-        dataset (Dataset): Dataset containing initial conditions and time points.
+        params (Parameters): Current parameter values.
+        model (Model): Model to simulate.
+        dataset (Dataset): Initial conditions and constants.
         config (SimulationConfig): Simulation configuration.
-        data (jax.Array): Data to fit.
-        times (jax.Array): Time points of the data.
-        observables (jax.Array): Indices of observable states.
-        objective_fun (Callable): Objective function for residual calculation.
+        data (jax.Array): Observed data, shape (measurements, times, observable states).
+        times (jax.Array): Time points, shape (measurements, times).
+        observed (jax.Array): Columns of the simulation that are observable states.
+        measured (jax.Array): Boolean mask of non-NaN data; fixed across calls, so the
+            residual length is constant and lmfit counts only real points.
+        objective_fun (Optional[Callable]): Per-point loss, or None for least squares.
 
     Returns:
-        jax.Array: Residuals between data and simulation
+        np.ndarray: 1-D residual; lmfit minimises the sum of its squares.
     """
 
     param_dict = {**params.valuesdict()}  # type: ignore
     parameters = jnp.array([param_dict[param] for param in model.get_parameter_order()])
 
-    # Use the new simulate API
     _, states = model.simulate(
         dataset=dataset,
         config=config,
@@ -203,5 +211,18 @@ def _residual(
         parameters=parameters,
         return_array=True,
     )
+    predicted = states[:, :, observed]
 
-    return objective_fun(data, states[:, :, observables])  # type: ignore
+    if objective_fun is None:
+        residual = predicted - data
+    else:
+        loss = objective_fun(data, predicted)
+        if jnp.shape(loss) != data.shape:
+            raise ValueError(
+                f"objective_fun must return one loss per data point (shape {data.shape}), "
+                f"got shape {jnp.shape(loss)}; losses that average over points cannot be used."
+            )
+        # lmfit squares and sums the residual, so sqrt(loss) makes that sum the total loss.
+        residual = jnp.sqrt(loss)
+
+    return np.asarray(residual[measured])

@@ -54,17 +54,23 @@ model.parameters.K_m.upper_bound = 500.0       # Physical upper limit
 model.parameters.v_max.value = None
 model.parameters.K_m.value = None
 
-# Perform optimization
+# Perform optimization (ordinary least squares by default)
 result, optimized_model = ctx.optimize(
     model=model,
     dataset=dataset,
     global_upper_bound=1e5,          # Default upper bound for unconstrained parameters
     global_lower_bound=1e-6,         # Default lower bound for unconstrained parameters
-    method="lbfgs",                  # Optimization algorithm
+    method="least_squares",          # lmfit method (default); reports standard errors
     dt0=0.01,                        # Integration step size
     max_steps=64**4                  # Maximum integration steps
 )
 ```
+
+Only the states of the model that are observable are compared with data: a state whose ODE
+was added with `observable=False` needs an initial condition but no data. NaN entries in the
+data (unsampled points, padding of shorter measurements) are left out of the fit. To fit with
+another per-point loss, pass `objective_fun(y_true, y_pred)` returning a non-negative array,
+e.g. `objective_fun=ctx.l1_loss`; the fit then minimises the sum of that loss.
 
 ## Model selection
 
