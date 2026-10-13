@@ -87,7 +87,7 @@ result, fitted_model = ctx.optimize(
 print(result.redchi)
 ```
 
-`noise` cannot be combined with `objective_fun`. The same noise object can be passed to `HMC.run` and to `catalax.doe`.
+`noise` cannot be combined with `objective_fun`, and its fields must be numbers (priors are only sampled by `HMC.run`). The same noise object can be passed to `catalax.doe`. It can also be passed to `HMC.run`, but the likelihoods then differ: `optimize` evaluates a noise model on the measured data (fixed weights), while `HMC` evaluates it on the model prediction, so its likelihood also depends on θ through log sd. For identical likelihoods, as in a fair comparison of weighted least squares with a Bayesian fit, compute `sd = noise.scale(data)` once and pass that same array to both `optimize` and `HMC.run`, with `likelihood=dist.Normal`.
 
 ## Model selection
 

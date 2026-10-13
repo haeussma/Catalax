@@ -170,7 +170,7 @@ hmc = cmc.HMC(
 
 **Observation noise**
 
-By default the noise level is sampled as `sigma`, with `yerrs` setting the scale of its prior. If you know the noise, pass `noise=` to `run` instead; it replaces the sampled `sigma` and `yerrs` is not needed. A fixed array (or float) of standard deviations gives the same likelihood as weighted least squares in `ctx.optimize`. A noise model from `ctx.noise` is evaluated on the model prediction, and any of its fields that is a prior is sampled, under the site names `sigma`, `cv` and `floor`:
+By default the noise level is sampled as `sigma`, with `yerrs` setting the scale of its prior. If you know the noise, pass `noise=` to `run` instead; it replaces the sampled `sigma`; give either `yerrs` or `noise`, not both. A fixed array (or float) of standard deviations gives the same likelihood as weighted least squares in `ctx.optimize`. A noise model from `ctx.noise` is evaluated on the model prediction, whereas `ctx.optimize` evaluates it on the measured data, so passing the same noise *object* to both gives different likelihoods (HMC's also depends on θ through log sd). For identical likelihoods, compute `sd = noise.scale(data)` once and pass that same array to both, with `likelihood=dist.Normal`. Any field of the noise model that is a prior is sampled, under the site names `sigma`, `cv` and `floor`:
 
 ```python
 import numpyro.distributions as dist
@@ -184,6 +184,8 @@ results = cmc.HMC(num_warmup=1000, num_samples=2000, likelihood=dist.Normal).run
     ),
 )
 ```
+
+A prior on `floor` must keep its density away from 0 (for example `LogNormal`, not `Uniform(0, ·)`): where the data equal the prediction (e.g. a product at 0 at t = 0) the likelihood grows like 1/floor.
 
 `noise` is always a standard deviation in data units; it is converted to the scale of the likelihood family (`Normal`, `SoftLaplace` and `Laplace` are supported). For a model that is linear in its parameter, with a flat prior, fixed noise and `likelihood=dist.Normal`, the posterior mean and standard deviation equal the weighted least-squares estimate and standard error. The older `HMC(noise_cv=...)` is deprecated in favour of `Proportional` and cannot be combined with `noise`.
 
