@@ -16,7 +16,7 @@ $$
 F(\theta) = \sum_{\text{arms}} \sum_{t} \sum_{\text{observables}} w\, w^\top
 $$
 
-Two noise models are provided. `Homoskedastic(sigma)` has a constant standard deviation. `Proportional(cv, floor)` has $\mathrm{sd}(y) = \sqrt{\text{floor}^2 + (\text{cv} \cdot y)^2}$, the usual model for HPLC-type assays whose error grows with the measured amount. Any object with `scale(prediction)` and `whiten(sensitivities, prediction)` methods works as a noise model.
+Two noise models are provided. `Homoskedastic(sigma)` has a constant standard deviation. `Proportional(cv, floor)` has $\mathrm{sd}(y) = \sqrt{\text{floor}^2 + (\text{cv} \cdot y)^2}$, the usual model for HPLC-type assays whose error grows with the measured amount. Any object with `scale(prediction)` and `whiten(sensitivities, prediction)` methods works as a noise model. The classes live in `catalax.noise` (re-exported by `catalax.doe`), and the same objects are passed as `noise=` to `ctx.optimize` and `HMC.run`, so the design, the least-squares fit and the Bayesian fit share one noise description. Their fields must be numbers here: `catalax.doe` refuses priors, which only `HMC.run` samples.
 
 ### Posterior shrinkage and efficiency
 
@@ -220,7 +220,7 @@ The "prior" column is now round 1's posterior. Its 1,000 samples (4 chains of 25
 With lab data, `data` is the measured `Dataset` instead, and nothing else changes. The simulated states that are not observable (`p` and `e` here) can stay in the data: `run_mcmc` fits the observable states only, and warns that the others are unused.
 
 - **Refit all the data under the original priors.** Merge the rounds with `add_measurement` and fit once more. Do not turn the last posterior into the next prior: the posterior is only known through finite samples, and any prior fitted to them is an approximation that compounds over rounds.
-- **Match the likelihood to the design's noise model.** `likelihood=dist.Normal` with `noise_cv` set gives the floor-plus-proportional noise of `Proportional`, with the floor's scale from `yerrs`. The default `SoftLaplace` would only rescale the information, but it should still match.
+- **Match the likelihood to the design's noise model.** Pass the design's noise model to the fit, `HMC.run(..., noise=<the design's noise model>)`, with `likelihood=dist.Normal`. The standard deviations are then the ones the design assumed. The default `SoftLaplace` also converts them, but its tails differ from the Gaussian the design assumes.
 - **Chains run in parallel by default** (`num_chains=4`, `chain_method="parallel"`). `import catalax` sets one CPU device per core, so nothing else is needed. Four chains of the bi-substrate model took 80 s in sequence and 30 s in parallel. To choose the count yourself, call `ctx.set_host_count(n)` right after `import catalax`, before simulating or fitting; the order of imports does not matter. Called later, it raises.
 - **`constant=True` parameters** are held at their `value` by `catalax.doe`, but `run_mcmc` still samples them from their priors. Their posterior samples are ignored by `belief`.
 - **Simulated data cannot detect a wrong rate law.** The data come from the model being fitted, so the fit is always consistent with it. Checking the mechanism needs real data.

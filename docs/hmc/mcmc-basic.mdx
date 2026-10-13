@@ -168,6 +168,25 @@ hmc = cmc.HMC(
 )
 ```
 
+**Observation noise**
+
+By default the noise level is sampled as `sigma`, with `yerrs` setting the scale of its prior. If you know the noise, pass `noise=` to `run` instead; it replaces the sampled `sigma` and `yerrs` is not needed. A fixed array (or float) of standard deviations gives the same likelihood as weighted least squares in `ctx.optimize`. A noise model from `ctx.noise` is evaluated on the model prediction, and any of its fields that is a prior is sampled, under the site names `sigma`, `cv` and `floor`:
+
+```python
+import numpyro.distributions as dist
+
+results = cmc.HMC(num_warmup=1000, num_samples=2000, likelihood=dist.Normal).run(
+    model=model,
+    dataset=dataset,
+    noise=ctx.noise.Proportional(
+        cv=cmc.priors.LogNormal(mu=0.035, sigma=0.4),  # sampled
+        floor=0.006,                                    # fixed
+    ),
+)
+```
+
+`noise` is always a standard deviation in data units; it is converted to the scale of the likelihood family (`Normal`, `SoftLaplace` and `Laplace` are supported). For a model that is linear in its parameter, with a flat prior, fixed noise and `likelihood=dist.Normal`, the posterior mean and standard deviation equal the weighted least-squares estimate and standard error. The older `HMC(noise_cv=...)` is deprecated in favour of `Proportional` and cannot be combined with `noise`.
+
 ### Step 4: Results Analysis and Diagnostics
 
 After MCMC sampling completes, thoroughly analyze the results to ensure the inference was successful and interpret the parameter estimates:

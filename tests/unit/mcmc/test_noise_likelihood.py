@@ -120,3 +120,8 @@ def test_noise_prior_name_clash_with_a_parameter_raises():
             shapes=prep.shapes, mode=Modes.MECHANISTIC, config=config.to_simulation_config(),
             noise=_clashing_noise(),
         )
+
+
+def test_noise_cv_is_deprecated():
+    with pytest.warns(DeprecationWarning, match="Proportional"):
+        cmm.HMC(num_warmup=1, num_samples=1, noise_cv=0.05, verbose=0)

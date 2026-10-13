@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import math
+import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -179,9 +180,16 @@ class HMC:
             verbose: Verbosity level; 0 for silent, 1 for progress
             max_steps: Maximum number of integration steps
             solver: Solver to use for simulation
-            noise_cv: Prior scale of a proportional noise term (see MCMCConfig); None
-                keeps the constant-sigma model
+            noise_cv: Deprecated, use ``noise=Proportional(...)`` in ``run``. Prior scale of
+                a proportional noise term (see MCMCConfig); None keeps the constant-sigma model
         """
+        if noise_cv is not None:
+            warnings.warn(
+                "noise_cv is deprecated; pass noise=catalax.noise.Proportional(cv=..., floor=...) "
+                "to HMC.run, with priors as fields to sample them.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.config = MCMCConfig(
             num_warmup=num_warmup,
             num_samples=num_samples,

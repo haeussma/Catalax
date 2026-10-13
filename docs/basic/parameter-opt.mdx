@@ -74,6 +74,21 @@ e.g. `objective_fun=ctx.l1_loss`; the fit then minimises the sum of that loss.
 
 The standard errors in the result are meaningful only for the default least-squares objective; with a custom `objective_fun` they come from the Jacobian of `sqrt(loss)`. Gradient-based scalar lmfit methods (e.g. `lbfgsb`, `bfgs`) need `ctx.enable_x64()` because their finite-difference steps cannot be resolved in float32.
 
+### Weighted least squares
+
+If the measurement noise is known, pass it as `noise=`: either a noise model from `ctx.noise` or the standard deviations themselves (a float, or an array shaped like the observable data). The residuals are divided by the standard deviation, which is evaluated once on the measured data. The standard deviations are taken as absolute and the standard errors are not rescaled, so check `result.redchi`: it is close to 1 when the noise model describes the residuals.
+
+```python
+result, fitted_model = ctx.optimize(
+    model=model,
+    dataset=dataset,
+    noise=ctx.noise.Proportional(cv=0.035, floor=0.006),  # sd = sqrt(floor² + (cv·y)²)
+)
+print(result.redchi)
+```
+
+`noise` cannot be combined with `objective_fun`. The same noise object can be passed to `HMC.run` and to `catalax.doe`.
+
 ## Model selection
 
 Model selection is a crucial step in parameter estimation that helps identify the most appropriate model structure for a given dataset. Catalax provides several metrics to assist with model selection, including:
