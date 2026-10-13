@@ -39,3 +39,16 @@ def test_design_refuses_noise_with_priors():
     noise = ctx.noise.Proportional(cv=cmm.priors.LogNormal(mu=0.035, sigma=0.4), floor=0.006)
     with pytest.raises(ValueError, match="fixed"):
         ctx.noise.as_noise_model(noise, fixed=True)
+
+
+def test_plain_class_noise_model_has_no_priors():
+    class Plain:
+        def scale(self, prediction):
+            return jnp.ones_like(prediction)
+
+        def whiten(self, sensitivities, prediction):
+            return sensitivities
+
+    obj = Plain()
+    assert ctx.noise.prior_fields(obj) == {}
+    assert ctx.noise.as_noise_model(obj, fixed=True) is obj

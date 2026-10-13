@@ -52,7 +52,12 @@ def _is_prior(value) -> bool:
 
 
 def prior_fields(noise) -> dict:
-    """The fields of a noise model that are priors (to be sampled), by name."""
+    """The fields of a noise model that are priors (to be sampled), by name.
+
+    A noise model that is not a dataclass (structural ``NoiseModel``) has none.
+    """
+    if not dataclasses.is_dataclass(noise):
+        return {}
     return {
         field.name: getattr(noise, field.name)
         for field in dataclasses.fields(noise)
