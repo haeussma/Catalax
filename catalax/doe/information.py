@@ -123,7 +123,7 @@ def _prepare_information_function(
         )
 
     model = model._replace_assignments()
-    noise = as_noise_model(noise)
+    noise = as_noise_model(noise, fixed=True)
     parameter_order = model.get_parameter_order()
     free = [name for name in parameter_order if not model.parameters[name].constant]
     if not free:

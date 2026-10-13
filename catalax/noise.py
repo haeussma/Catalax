@@ -15,11 +15,13 @@ inference likelihood, not here.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Protocol, runtime_checkable
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
+import numpyro
 
 
 @runtime_checkable
@@ -44,11 +46,41 @@ def _divide_by_scale(sensitivities: jax.Array, scale: jax.Array) -> jax.Array:
     return sensitivities / scale[..., None]
 
 
+def _is_prior(value) -> bool:
+    # Duck-typed: importing catalax.mcmc here would be circular (catalax.mcmc imports this module).
+    return hasattr(value, "_distribution_fun")
+
+
+def prior_fields(noise) -> dict:
+    """The fields of a noise model that are priors (to be sampled), by name."""
+    return {
+        field.name: getattr(noise, field.name)
+        for field in dataclasses.fields(noise)
+        if _is_prior(getattr(noise, field.name))
+    }
+
+
+def sample_noise(noise):
+    """Inside a numpyro model: the noise model with every prior field replaced by a sample.
+
+    Each prior is sampled as a site named after its field (``sigma``, ``cv``, ``floor``).
+    A noise model without priors is returned unchanged.
+    """
+    priors = prior_fields(noise)
+    if not priors:
+        return noise
+    values = [numpyro.sample(name, prior._distribution_fun()) for name, prior in priors.items()]
+    return eqx.tree_at(lambda m: [getattr(m, name) for name in priors], noise, values)
+
+
 class Homoskedastic(eqx.Module):
     """Constant additive noise, ``y ~ Normal(y_hat, sigma)``.
 
     ``sigma`` is a dynamic pytree leaf (not static), so it can carry a batch of
     values under ``vmap`` and never silently hits a stale ``jit`` cache entry.
+
+    Any field may be a catalax.mcmc.priors prior instead of a number; HMC then
+    samples it. The design code needs numbers.
 
     Attributes:
         sigma: Noise standard deviation in data units; a scalar, or one value per data point (an array broadcastable to the data).
@@ -60,7 +92,7 @@ class Homoskedastic(eqx.Module):
         """Args:
         sigma: Noise standard deviation in concentration units.
         """
-        self.sigma = jnp.asarray(sigma, dtype=float)
+        self.sigma = sigma if _is_prior(sigma) else jnp.asarray(sigma, dtype=float)
 
     def scale(self, prediction: jax.Array) -> jax.Array:
         """Returns ``sigma`` broadcast to the shape of ``prediction``.
@@ -95,6 +127,9 @@ class Proportional(eqx.Module):
     ``2 * cv**2``, 0.5% at cv = 5%), and this is also the information of
     ``y ~ LogNormal(log y_hat, cv)`` in the limit ``floor -> 0``.
 
+    Any field may be a catalax.mcmc.priors prior instead of a number; HMC then
+    samples it. The design code needs numbers.
+
     Attributes:
         cv: Relative standard deviation of the proportional component.
         floor: Standard deviation floor in concentration units, strictly positive.
@@ -111,15 +146,16 @@ class Proportional(eqx.Module):
         Raises:
             ValueError: If ``floor`` is not strictly positive.
         """
-        floor = jnp.asarray(floor, dtype=float)
-        if not bool(jnp.all(floor > 0.0)):
-            raise ValueError(
-                f"Proportional(floor=...) must be strictly positive, got {floor}. "
-                "At a point where the prediction is 0 (e.g. t = 0 with no initial "
-                "product) floor = 0 makes the noise scale 0 and whitening 0/0 = NaN."
-                " Use the assay's detection-limit standard deviation instead."
-            )
-        self.cv = jnp.asarray(cv, dtype=float)
+        if not _is_prior(floor):
+            floor = jnp.asarray(floor, dtype=float)
+            if not bool(jnp.all(floor > 0.0)):
+                raise ValueError(
+                    f"Proportional(floor=...) must be strictly positive, got {floor}. "
+                    "At a point where the prediction is 0 (e.g. t = 0 with no initial "
+                    "product) floor = 0 makes the noise scale 0 and whitening 0/0 = NaN."
+                    " Use the assay's detection-limit standard deviation instead."
+                )
+        self.cv = cv if _is_prior(cv) else jnp.asarray(cv, dtype=float)
         self.floor = floor
 
     def scale(self, prediction: jax.Array) -> jax.Array:
@@ -146,19 +182,21 @@ class Proportional(eqx.Module):
         return _divide_by_scale(sensitivities, self.scale(prediction))
 
 
-def as_noise_model(noise: NoiseModel | float | jax.Array) -> NoiseModel:
+def as_noise_model(noise: NoiseModel | float | jax.Array, fixed: bool = False) -> NoiseModel:
     """Coerces a bare noise standard deviation to ``Homoskedastic``.
 
     Args:
         noise: A ``NoiseModel``, or a noise standard deviation.
+        fixed: Raise if any field is a prior (the design code needs numbers).
 
     Returns:
         ``noise`` unchanged if it already is a ``NoiseModel``, else
         ``Homoskedastic(noise)``.
     """
-    if isinstance(noise, NoiseModel):
-        return noise
-    return Homoskedastic(noise)
+    model = noise if isinstance(noise, NoiseModel) else Homoskedastic(noise)
+    if fixed and prior_fields(model):
+        raise ValueError(f"The design needs fixed noise values; got priors for {list(prior_fields(model))}.")
+    return model
 
 
-__all__ = ["Homoskedastic", "NoiseModel", "Proportional", "as_noise_model"]
+__all__ = ["Homoskedastic", "NoiseModel", "Proportional", "as_noise_model", "prior_fields", "sample_noise"]

@@ -84,3 +84,39 @@ def test_unknown_family_and_conflicts_raise():
         cmm.HMC(num_warmup=1, num_samples=1, noise_cv=0.05, verbose=0).run(model, data, noise=0.1)
     with pytest.raises(ValueError, match="yerrs"):
         cmm.HMC(num_warmup=1, num_samples=1, verbose=0).run(model, data)
+
+
+def test_noise_priors_are_sampled_and_used():
+    noise = ctx.noise.Proportional(
+        cv=cmm.priors.LogNormal(mu=0.035, sigma=0.4), floor=cmm.priors.LogNormal(mu=0.006, sigma=0.6)
+    )
+    trace, fn, _ = _trace(noise)
+    cv, floor = trace["cv"]["value"], trace["floor"]["value"]
+    assert isinstance(trace["cv"]["fn"], dist.LogNormal)
+    assert jnp.allclose(fn.scale, jnp.sqrt(floor**2 + (cv * fn.loc) ** 2))
+
+
+def _clashing_noise():
+    """A noise model whose prior field has the same name as the model parameter k."""
+    import equinox as eqx
+
+    class K(eqx.Module):
+        k: object
+
+        def scale(self, prediction):
+            return jnp.broadcast_to(self.k, prediction.shape)
+
+        def whiten(self, sensitivities, prediction):
+            return sensitivities / self.scale(prediction)[..., None]
+
+    return K(k=cmm.priors.LogNormal(mu=0.1, sigma=0.5))
+
+
+def test_noise_prior_name_clash_with_a_parameter_raises():
+    model, prep, config = _problem()
+    with pytest.raises(ValueError, match="clash"):
+        BayesianModel(
+            model=model, yerrs=None, likelihood=dist.Normal, sim_func=prep.sim_func,
+            shapes=prep.shapes, mode=Modes.MECHANISTIC, config=config.to_simulation_config(),
+            noise=_clashing_noise(),
+        )

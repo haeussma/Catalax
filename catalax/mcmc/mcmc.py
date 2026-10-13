@@ -29,7 +29,7 @@ from catalax.dataset.dataset import Dataset
 from catalax.mcmc.protocols import PostModel, PreModel, Shapes
 from catalax.mcmc.results import HMCResults
 from catalax.model.simconfig import SimulationConfig
-from catalax.noise import NoiseModel, as_noise_model
+from catalax.noise import NoiseModel, as_noise_model, prior_fields, sample_noise
 from catalax.surrogate import Surrogate
 
 if TYPE_CHECKING:
@@ -417,6 +417,10 @@ class BayesianModel:
         self.rate_sigma = rate_sigma
         self.noise_cv = noise_cv
         self.noise = noise
+        if noise is not None:
+            clash = set(prior_fields(noise)) & set(model.parameters)
+            if clash:
+                raise ValueError(f"Noise prior names {sorted(clash)} clash with model parameters.")
         self.noise_factor = noise_factor
 
         # Pre-compute priors and observables
@@ -497,7 +501,7 @@ class BayesianModel:
 
         if self.noise is not None:
             predicted = states[..., self.observables]
-            sd = jnp.broadcast_to(self.noise.scale(predicted), predicted.shape)
+            sd = jnp.broadcast_to(sample_noise(self.noise).scale(predicted), predicted.shape)
             # unmeasured points are masked out; give them a harmless scale so no NaN reaches the gradient
             scale = jnp.where(mask, sd, 1.0) * self.noise_factor
             with numpyro.handlers.mask(mask=mask):
