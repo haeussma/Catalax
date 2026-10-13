@@ -16,7 +16,7 @@ import jax
 import jax.numpy as jnp
 
 from catalax.dataset.dataset import Dataset
-from catalax.doe.noise import NoiseModel, as_noise_model
+from catalax.noise import NoiseModel, as_noise_model
 from catalax.model.inaxes import InAxes
 from catalax.model.simconfig import SimulationConfig
 from catalax.tools.simulation import Simulation

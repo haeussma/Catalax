@@ -36,6 +36,7 @@ from .model import InAxes, Model, SimulationConfig
 from .objectives import l1_loss, mean_absolute_error
 from .tools.enzymeml import dataset_and_model_from_enzymeml as from_enzymeml
 from .tools.optimization import optimize
+from . import noise
 
 _mpl.rcParams["figure.dpi"] = 300
 _mpl.rcParams["savefig.dpi"] = 300

@@ -17,7 +17,7 @@ from jax.typing import ArrayLike
 from catalax import _usable_cores
 from catalax.dataset.dataset import Dataset
 from catalax.doe.evaluate import DesignReport, _prepare_efficiency, evaluate_design
-from catalax.doe.noise import NoiseModel
+from catalax.noise import NoiseModel
 from catalax.model.simconfig import SimulationConfig
 
 if TYPE_CHECKING:

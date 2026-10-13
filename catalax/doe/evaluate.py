@@ -16,7 +16,7 @@ from numpyro.distributions import constraints
 
 from catalax.dataset.dataset import Dataset
 from catalax.doe.information import DesignArrays, _prepare_information_function
-from catalax.doe.noise import NoiseModel
+from catalax.noise import NoiseModel
 from catalax.model.simconfig import SimulationConfig
 
 if TYPE_CHECKING:
