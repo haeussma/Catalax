@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import math
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -28,10 +29,15 @@ from catalax.dataset.dataset import Dataset
 from catalax.mcmc.protocols import PostModel, PreModel, Shapes
 from catalax.mcmc.results import HMCResults
 from catalax.model.simconfig import SimulationConfig
+from catalax.noise import NoiseModel, as_noise_model
 from catalax.surrogate import Surrogate
 
 if TYPE_CHECKING:
     from catalax.model.model import Model
+
+# A noise model gives standard deviations; a likelihood family takes a scale. SD of
+# SoftLaplace(0, s) is pi/2 * s, of Laplace(0, s) is sqrt(2) * s.
+SD_TO_SCALE = {dist.Normal: 1.0, dist.SoftLaplace: 2 / math.pi, dist.Laplace: 1 / math.sqrt(2)}
 
 
 @dataclass
@@ -200,11 +206,12 @@ class HMC:
         self,
         model: "Model",
         dataset: Dataset,
-        yerrs: Union[float, Array],
+        yerrs: Optional[Union[float, Array]] = None,
         surrogate: Optional[Surrogate] = None,
         pre_model: Optional[PreModel] = None,
         post_model: Optional[PostModel] = None,
         abort_on_error: bool = False,
+        noise: Optional[Union[NoiseModel, Array, float]] = None,
     ) -> HMCResults:
         """Run MCMC simulation to infer posterior distribution of parameters.
 
@@ -216,11 +223,12 @@ class HMC:
         Args:
             model: Model to fit
             dataset: Dataset containing observations to fit against
-            yerrs: Standard deviation of observed data
+            yerrs: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Not used with noise.
             surrogate: Optional surrogate model for rate prediction
             pre_model: Optional function to transform inputs and parameters before simulation
             post_model: Optional function to transform outputs after simulation
             solver: Solver to use for simulation
+            noise: Observation noise as standard deviations (see catalax.noise): fixed per-point SDs (array or float) or a noise model evaluated on the prediction. Replaces the sampled sigma.
         Returns:
             Tuple of (MCMC object with results, Bayesian model function)
 
@@ -232,6 +240,22 @@ class HMC:
         # Validate inputs
         _validate_parameter_priors(model)
         _validate_model_functions(pre_model, post_model)
+
+        noise_factor = 1.0
+        if noise is not None:
+            if self.config.noise_cv is not None:
+                raise ValueError("Give either noise or noise_cv, not both.")
+            if surrogate is not None:
+                raise ValueError("noise is not supported with a surrogate model.")
+            if self.config.likelihood not in SD_TO_SCALE:
+                raise ValueError(
+                    f"noise gives standard deviations; the likelihood {self.config.likelihood.__name__} "
+                    f"has no known SD-to-scale conversion. Use one of {[d.__name__ for d in SD_TO_SCALE]}."
+                )
+            noise = as_noise_model(noise)
+            noise_factor = SD_TO_SCALE[self.config.likelihood]
+        elif yerrs is None:
+            raise ValueError("Give yerrs (scale of the sampled sigma's prior) or noise.")
 
         # Setup model and prepare data
         config = self.config.to_simulation_config()
@@ -259,16 +283,18 @@ class HMC:
             sigma_surr = None
             rate_sigma = None
 
-        if isinstance(yerrs, float):
-            # If yerrs is a scalar, we broadcast it to the shape of the data
-            yerrs_ = jnp.broadcast_to(
-                yerrs,
-                data_prep.data.shape,
-            )
-        elif isinstance(yerrs, Array):
-            yerrs_ = yerrs
-        else:
-            raise ValueError(f"Invalid type for yerrs: {type(yerrs)}")
+        yerrs_ = None
+        if yerrs is not None:
+            if isinstance(yerrs, float):
+                # If yerrs is a scalar, we broadcast it to the shape of the data
+                yerrs_ = jnp.broadcast_to(
+                    yerrs,
+                    data_prep.data.shape,
+                )
+            elif isinstance(yerrs, Array):
+                yerrs_ = yerrs
+            else:
+                raise ValueError(f"Invalid type for yerrs: {type(yerrs)}")
 
         # Create Bayesian model
         bayes_model = BayesianModel(
@@ -284,6 +310,8 @@ class HMC:
             sigma_surr=sigma_surr,
             rate_sigma=rate_sigma,
             noise_cv=self.config.noise_cv,
+            noise=noise,  # type: ignore
+            noise_factor=noise_factor,
         )
 
         # Initialize and run MCMC
@@ -345,7 +373,7 @@ class BayesianModel:
     def __init__(
         self,
         model: "Model",
-        yerrs: Array,
+        yerrs: Optional[Array],
         likelihood: Type[dist.Distribution],
         sim_func: Callable,
         shapes: Shapes,
@@ -356,6 +384,8 @@ class BayesianModel:
         pre_model: Optional[PreModel] = None,
         post_model: Optional[PostModel] = None,
         noise_cv: Optional[float] = None,
+        noise: Optional[NoiseModel] = None,
+        noise_factor: float = 1.0,
     ):
         """Initialize the Bayesian model.
 
@@ -369,6 +399,8 @@ class BayesianModel:
             solver: Solver to use for simulation
             pre_model: Optional function to transform inputs and parameters before simulation
             post_model: Optional function to transform outputs after simulation
+            noise: Observation noise model; replaces the sampled sigma when given
+            noise_factor: Factor from standard deviation to the likelihood family's scale
         """
         self.model = deepcopy(model)
         self.model._setup_system(config)
@@ -384,6 +416,8 @@ class BayesianModel:
         self.sigma_surr = sigma_surr
         self.rate_sigma = rate_sigma
         self.noise_cv = noise_cv
+        self.noise = noise
+        self.noise_factor = noise_factor
 
         # Pre-compute priors and observables
         self.priors = [
@@ -461,6 +495,15 @@ class BayesianModel:
                 pre_output=pre_output,
             )
 
+        if self.noise is not None:
+            predicted = states[..., self.observables]
+            sd = jnp.broadcast_to(self.noise.scale(predicted), predicted.shape)
+            # unmeasured points are masked out; give them a harmless scale so no NaN reaches the gradient
+            scale = jnp.where(mask, sd, 1.0) * self.noise_factor
+            with numpyro.handlers.mask(mask=mask):
+                numpyro.sample("y", self.likelihood(predicted, scale), obs=data)  # type: ignore
+            return
+
         # Sample noise parameter
         # Expand yerrs to match shape of states
         sigma_disc = numpyro.sample(
@@ -494,11 +537,12 @@ class BayesianModel:
 def run_mcmc(
     model: "Model",
     dataset: Dataset,
-    yerrs: Union[float, Array],
+    yerrs: Optional[Union[float, Array]],
     config: MCMCConfig,
     surrogate: Optional[Surrogate] = None,
     pre_model: Optional[PreModel] = None,
     post_model: Optional[PostModel] = None,
+    noise: Optional[Union[NoiseModel, Array, float]] = None,
 ) -> HMCResults:
     """Run MCMC simulation to infer posterior distribution of parameters.
 
@@ -510,11 +554,12 @@ def run_mcmc(
     Args:
         model: Model to fit
         dataset: Dataset containing observations to fit against
-        yerrs: Standard deviation of observed data
+        yerrs: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Not used with noise.
         config: MCMC configuration parameters
         surrogate: Optional surrogate model for rate prediction
         pre_model: Optional function to transform inputs and parameters before simulation
         post_model: Optional function to transform outputs after simulation
+        noise: Observation noise as standard deviations (see catalax.noise): fixed per-point SDs (array or float) or a noise model evaluated on the prediction. Replaces the sampled sigma.
 
     Returns:
         Tuple of (MCMC object with results, Bayesian model function)
@@ -533,6 +578,7 @@ def run_mcmc(
         surrogate=surrogate,
         pre_model=pre_model,
         post_model=post_model,
+        noise=noise,
     )
 
 
