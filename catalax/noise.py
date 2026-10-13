@@ -29,7 +29,8 @@ class NoiseModel(Protocol):
     """Whitens sensitivities by the per-point observation noise scale.
 
     Structural: any object with matching ``scale`` and ``whiten`` methods is a
-    ``NoiseModel``, no subclassing needed.
+    ``NoiseModel``, no subclassing needed. Only dataclass fields (equinox Modules)
+    can hold priors for HMC to sample.
     """
 
     def scale(self, prediction: jax.Array) -> jax.Array:
@@ -54,7 +55,9 @@ def _is_prior(value) -> bool:
 def prior_fields(noise) -> dict:
     """The fields of a noise model that are priors (to be sampled), by name.
 
-    A noise model that is not a dataclass (structural ``NoiseModel``) has none.
+    A noise model that is not a dataclass (structural ``NoiseModel``) has none: only
+    dataclass fields (equinox Modules such as the built-in models) are recognised as
+    priors. An array-valued field with a prior is sampled as one scalar site.
     """
     if not dataclasses.is_dataclass(noise):
         return {}
@@ -95,7 +98,7 @@ class Homoskedastic(eqx.Module):
 
     def __init__(self, sigma: float | jax.Array) -> None:
         """Args:
-        sigma: Noise standard deviation in concentration units.
+        sigma: Noise standard deviation in data units.
         """
         self.sigma = sigma if _is_prior(sigma) else jnp.asarray(sigma, dtype=float)
 
@@ -137,7 +140,7 @@ class Proportional(eqx.Module):
 
     Attributes:
         cv: Relative standard deviation of the proportional component.
-        floor: Standard deviation floor in concentration units, strictly positive.
+        floor: Standard deviation floor in data units, strictly positive.
     """
 
     cv: jax.Array
@@ -146,7 +149,7 @@ class Proportional(eqx.Module):
     def __init__(self, cv: float | jax.Array, floor: float | jax.Array) -> None:
         """Args:
             cv: Relative standard deviation, e.g. 0.05 for 5%.
-            floor: Standard deviation floor in concentration units.
+            floor: Standard deviation floor in data units.
 
         Raises:
             ValueError: If ``floor`` is not strictly positive.
@@ -200,7 +203,10 @@ def as_noise_model(noise: NoiseModel | float | jax.Array, fixed: bool = False) -
     """
     model = noise if isinstance(noise, NoiseModel) else Homoskedastic(noise)
     if fixed and prior_fields(model):
-        raise ValueError(f"The design needs fixed noise values; got priors for {list(prior_fields(model))}.")
+        raise ValueError(
+            f"This needs fixed noise values; got priors for {list(prior_fields(model))}. "
+            "Priors are only sampled by HMC.run."
+        )
     return model
 
 

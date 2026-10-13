@@ -87,7 +87,7 @@ def optimize(
                 "Give either noise (weighted least squares) or objective_fun, not both."
             )
         # Evaluated on the measured values, once: fixed weights cannot be gamed by the fit.
-        sigma = jnp.broadcast_to(as_noise_model(noise).scale(data), data.shape)
+        sigma = jnp.broadcast_to(as_noise_model(noise, fixed=True).scale(data), data.shape)
         if not bool(jnp.all(jnp.isfinite(sigma[measured]) & (sigma[measured] > 0))):
             raise ValueError(
                 "noise must give a finite, positive standard deviation at every measured point."

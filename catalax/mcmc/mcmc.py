@@ -30,7 +30,7 @@ from catalax.dataset.dataset import Dataset
 from catalax.mcmc.protocols import PostModel, PreModel, Shapes
 from catalax.mcmc.results import HMCResults
 from catalax.model.simconfig import SimulationConfig
-from catalax.noise import NoiseModel, as_noise_model, prior_fields, sample_noise
+from catalax.noise import Homoskedastic, NoiseModel, as_noise_model, prior_fields, sample_noise
 from catalax.surrogate import Surrogate
 
 if TYPE_CHECKING:
@@ -187,7 +187,7 @@ class HMC:
             warnings.warn(
                 "noise_cv is deprecated; pass noise=catalax.noise.Proportional(cv=..., floor=...) "
                 "to HMC.run, with priors as fields to sample them.",
-                DeprecationWarning,
+                FutureWarning,  # DeprecationWarning raised in library code is hidden by default
                 stacklevel=2,
             )
         self.config = MCMCConfig(
@@ -231,7 +231,7 @@ class HMC:
         Args:
             model: Model to fit
             dataset: Dataset containing observations to fit against
-            yerrs: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Not used with noise.
+            yerrs: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Give either yerrs or noise, not both.
             surrogate: Optional surrogate model for rate prediction
             pre_model: Optional function to transform inputs and parameters before simulation
             post_model: Optional function to transform outputs after simulation
@@ -251,6 +251,8 @@ class HMC:
 
         noise_factor = 1.0
         if noise is not None:
+            if yerrs is not None:
+                raise ValueError("Give either yerrs or noise, not both.")
             if self.config.noise_cv is not None:
                 raise ValueError("Give either noise or noise_cv, not both.")
             if surrogate is not None:
@@ -273,6 +275,12 @@ class HMC:
             surrogate,
             config,
         )
+
+        if noise is not None and not prior_fields(noise) and isinstance(noise, Homoskedastic):
+            # fixed SDs, as in optimize: they must be usable at every measured point
+            sd = noise.scale(data_prep.data)[data_prep.mask]
+            if not bool(jnp.all(jnp.isfinite(sd) & (sd > 0))):
+                raise ValueError("noise must give a finite, positive standard deviation at every measured point.")
 
         if abort_on_error:
             config.throw = True
@@ -566,7 +574,7 @@ def run_mcmc(
     Args:
         model: Model to fit
         dataset: Dataset containing observations to fit against
-        yerrs: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Not used with noise.
+        yerrs: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Give either yerrs or noise, not both.
         config: MCMC configuration parameters
         surrogate: Optional surrogate model for rate prediction
         pre_model: Optional function to transform inputs and parameters before simulation

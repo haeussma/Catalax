@@ -37,7 +37,7 @@ def test_numeric_floor_must_still_be_positive():
 
 def test_design_refuses_noise_with_priors():
     noise = ctx.noise.Proportional(cv=cmm.priors.LogNormal(mu=0.035, sigma=0.4), floor=0.006)
-    with pytest.raises(ValueError, match="fixed"):
+    with pytest.raises(ValueError, match="fixed noise values"):
         ctx.noise.as_noise_model(noise, fixed=True)
 
 

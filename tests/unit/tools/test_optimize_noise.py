@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 import catalax as ctx
+import catalax.mcmc as cmm
 
 NOISE = jnp.array([0.0, 0.3, -0.2, 0.9, -0.4, 0.1])
 
@@ -95,6 +96,30 @@ def test_missing_points_are_left_out():
     result, _ = ctx.optimize(model, dataset, noise=sigma)
     assert result.ndata == 5
     assert np.isfinite(result.params["k"].value)
+
+
+def test_missing_points_with_a_noise_model_match_the_explicit_array():
+    model, dataset = linear_problem()
+    dataset.measurements[0].data["P"] = (
+        dataset.measurements[0].data["P"].at[3].set(jnp.nan)
+    )
+    noise = ctx.noise.Proportional(cv=0.1, floor=0.2)
+    data, _ = _arrays(model, dataset)
+    by_model, _ = ctx.optimize(model, dataset, noise=noise)
+    by_array, _ = ctx.optimize(model, dataset, noise=noise.scale(data))
+    assert by_model.ndata == 5
+    assert by_model.params["k"].value == pytest.approx(
+        by_array.params["k"].value, rel=1e-6
+    )
+
+
+def test_noise_with_priors_raises():
+    model, dataset = linear_problem()
+    noise = ctx.noise.Proportional(
+        cv=cmm.priors.LogNormal(mu=0.035, sigma=0.4), floor=0.006
+    )
+    with pytest.raises(ValueError, match="only sampled by HMC"):
+        ctx.optimize(model, dataset, noise=noise)
 
 
 def test_noise_and_objective_fun_conflict():

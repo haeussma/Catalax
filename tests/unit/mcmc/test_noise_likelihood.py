@@ -2,6 +2,7 @@
 
 import math
 
+import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
@@ -9,6 +10,8 @@ import pytest
 
 import catalax as ctx
 import catalax.mcmc as cmm
+from numpyro.infer.util import potential_energy
+
 from catalax.mcmc.mcmc import SD_TO_SCALE, BayesianModel, Modes, _prepare_mcmc_data
 
 pytestmark = pytest.mark.usefixtures("x64")
@@ -73,6 +76,29 @@ def test_proportional_is_evaluated_on_the_prediction():
     assert jnp.allclose(fn.scale, jnp.sqrt(0.05**2 + (0.1 * prediction) ** 2))
 
 
+def test_gradient_is_finite_with_nan_data_and_nan_sd_at_an_unmeasured_point():
+    """The jnp.where guard in BayesianModel keeps a NaN SD at a masked point out of the gradient."""
+    model, prep, config = _problem()
+    bad = (0, 1, 0)
+    data = prep.data.at[bad].set(jnp.nan)
+    mask = prep.mask.at[bad].set(False)
+    sigma = jnp.full(prep.data.shape, 0.2).at[bad].set(jnp.nan)
+    bayesian_model = BayesianModel(
+        model=model, yerrs=None, likelihood=dist.Normal, sim_func=prep.sim_func, shapes=prep.shapes,
+        mode=Modes.MECHANISTIC, config=config.to_simulation_config(),
+        noise=ctx.noise.as_noise_model(sigma), noise_factor=SD_TO_SCALE[dist.Normal],
+    )  # fmt: skip
+
+    def potential(u):
+        return potential_energy(
+            bayesian_model, (), dict(y0s=prep.y0s, constants=prep.constants, times=prep.times, mask=mask, data=data),
+            {"k": u},
+        )  # fmt: skip
+
+    value, grad = jax.value_and_grad(potential)(jnp.array(0.0))
+    assert jnp.isfinite(value) and jnp.isfinite(grad)
+
+
 def test_unknown_family_and_conflicts_raise():
     model, _, _ = _problem()
     data = ctx.Dataset.from_model(model)
@@ -84,6 +110,18 @@ def test_unknown_family_and_conflicts_raise():
         cmm.HMC(num_warmup=1, num_samples=1, noise_cv=0.05, verbose=0).run(model, data, noise=0.1)
     with pytest.raises(ValueError, match="yerrs"):
         cmm.HMC(num_warmup=1, num_samples=1, verbose=0).run(model, data)
+    with pytest.raises(ValueError, match="not both"):
+        cmm.HMC(num_warmup=1, num_samples=1, verbose=0).run(model, data, yerrs=0.1, noise=0.1)
+
+
+def test_fixed_zero_sd_at_a_measured_point_raises():
+    model, prep, _ = _problem()
+    data = ctx.Dataset.from_model(model)
+    data.add_initial(time=[0.0, 1.0], A=1.0, B=10.0, C=0.0)
+    data = model.simulate(data, ctx.SimulationConfig(t1=1.0), saveat=data.to_time_matrix())
+    sigma = jnp.full(data.to_jax_arrays(model.get_observable_state_order())[0].shape, 0.1).at[0, 1, 0].set(0.0)
+    with pytest.raises(ValueError, match="positive"):
+        cmm.HMC(num_warmup=1, num_samples=1, verbose=0).run(model, data, noise=sigma)
 
 
 def test_noise_priors_are_sampled_and_used():
@@ -123,5 +161,5 @@ def test_noise_prior_name_clash_with_a_parameter_raises():
 
 
 def test_noise_cv_is_deprecated():
-    with pytest.warns(DeprecationWarning, match="Proportional"):
+    with pytest.warns(FutureWarning, match="Proportional"):
         cmm.HMC(num_warmup=1, num_samples=1, noise_cv=0.05, verbose=0)
