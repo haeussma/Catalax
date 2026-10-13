@@ -9,6 +9,7 @@ from lmfit.minimizer import MinimizerResult
 
 from catalax.dataset.dataset import Dataset
 from catalax.model import Model, SimulationConfig
+from catalax.noise import NoiseModel, as_noise_model
 
 
 def optimize(
@@ -20,6 +21,7 @@ def optimize(
     objective_fun: Optional[Callable[[jax.Array, jax.Array], jax.Array]] = None,
     max_steps: int = 64**4,
     method: str = "least_squares",
+    noise: Optional[NoiseModel | jax.Array | float] = None,
 ) -> Tuple[MinimizerResult, Model]:
     """Fit the parameters of a model to a dataset with lmfit.
 
@@ -28,12 +30,23 @@ def optimize(
     in the data (unsampled points, padding of shorter measurements) are left out.
 
     By default this is ordinary least squares: lmfit receives the residual vector
-    ``simulation - data`` and minimises its sum of squares. A per-point loss can be
-    given instead as ``objective_fun(y_true, y_pred)`` returning a non-negative array;
-    the fit then minimises the sum of that loss over the measured points.
+    ``simulation - data`` and minimises its sum of squares; the noise level is estimated
+    from the residuals, so the standard errors are scaled by the reduced chi-square.
 
-    The standard errors in the result are meaningful only for the default least-squares
-    objective; with a custom ``objective_fun`` they come from the Jacobian of ``sqrt(loss)``.
+    With ``noise`` it is weighted least squares. ``noise`` is a noise model (see
+    ``catalax.noise``) or the standard deviations themselves (a float, or an array shaped
+    like the observable data). It is evaluated once on the measured data, ``sd =
+    noise.scale(data)``, and the residual becomes ``(simulation - data) / sd``. The
+    standard deviations are taken as absolute: the standard errors are not rescaled, so
+    report ``result.redchi`` (about 1 when the noise model fits the residuals).
+
+    A per-point loss can be given instead as ``objective_fun(y_true, y_pred)`` returning a
+    non-negative array; the fit then minimises the sum of that loss over the measured
+    points. It cannot be combined with ``noise``.
+
+    The standard errors in the result are meaningful only for the least-squares objectives
+    (default or ``noise``); with a custom ``objective_fun`` they come from the Jacobian of
+    ``sqrt(loss)``.
 
     The returned model is a modified COPY of the input model carrying the fitted
     parameter values; the input model is not changed.
@@ -54,6 +67,8 @@ def optimize(
         method (str, optional): lmfit method. Defaults to "least_squares". Gradient-based
             scalar methods (e.g. ``lbfgsb``, ``bfgs``) need ``ctx.enable_x64()``: their
             finite-difference steps cannot be resolved in float32.
+        noise (NoiseModel | Array | float, optional): Observation noise, as absolute
+            standard deviations; see above. Defaults to None (ordinary least squares).
 
     Returns:
         Tuple[MinimizerResult, Model]: lmfit result and the fitted copy of the model.
@@ -64,6 +79,19 @@ def optimize(
     data, times, _ = dataset.to_jax_arrays(model.get_observable_state_order())
     observed = jnp.array(model.get_observable_state_order(as_indices=True))
     measured = ~jnp.isnan(data)
+
+    sigma = None
+    if noise is not None:
+        if objective_fun is not None:
+            raise ValueError(
+                "Give either noise (weighted least squares) or objective_fun, not both."
+            )
+        # Evaluated on the measured values, once: fixed weights cannot be gamed by the fit.
+        sigma = jnp.broadcast_to(as_noise_model(noise).scale(data), data.shape)
+        if not bool(jnp.all(jnp.isfinite(sigma[measured]) & (sigma[measured] > 0))):
+            raise ValueError(
+                "noise must give a finite, positive standard deviation at every measured point."
+            )
 
     fit_kws = {}
     # The finite-difference step must exceed the accumulated rounding error of the ODE
@@ -93,6 +121,7 @@ def optimize(
         observed,
         measured,
         objective_fun,
+        sigma,
     )
 
     _ipython_print(params)
@@ -102,6 +131,7 @@ def optimize(
         params,
         args=minimize_args,
         method=method,
+        scale_covar=noise is None,
         **fit_kws,
     )
 
@@ -195,6 +225,7 @@ def _residual(
     observed: jax.Array,
     measured: jax.Array,
     objective_fun: Optional[Callable[[jax.Array, jax.Array], jax.Array]],
+    sigma: Optional[jax.Array],
 ) -> np.ndarray:
     """Residual vector over the measured points of the observable states.
 
@@ -209,6 +240,7 @@ def _residual(
         measured (jax.Array): Boolean mask of non-NaN data; fixed across calls, so the
             residual length is constant and lmfit counts only real points.
         objective_fun (Optional[Callable]): Per-point loss, or None for least squares.
+        sigma (Optional[jax.Array]): Per-point standard deviations, or None for unweighted residuals.
 
     Returns:
         np.ndarray: 1-D residual; lmfit minimises the sum of its squares.
@@ -228,6 +260,8 @@ def _residual(
 
     if objective_fun is None:
         residual = predicted - data
+        if sigma is not None:
+            residual = residual / sigma
     else:
         loss = objective_fun(data, predicted)
         if jnp.shape(loss) != data.shape:
