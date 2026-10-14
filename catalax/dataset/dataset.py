@@ -1232,12 +1232,15 @@ class Dataset(BaseModel):
 
         # Generate augmented measurements
         augmented_meas = []
+        n = len(self.measurements)
         for i in range(n_augmentations):
-            for meas in self.measurements:
+            for j, meas in enumerate(self.measurements):
                 augmented_meas.append(
                     meas.augment(
                         sigma=sigma,
-                        seed=seed + i,
+                        # one seed per measurement and round: shared seeds would give
+                        # every curve the same noise pattern
+                        seed=seed + i * n + j,
                         multiplicative=multiplicative,
                     )
                 )

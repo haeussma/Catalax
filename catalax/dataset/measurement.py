@@ -754,14 +754,15 @@ class Measurement(BaseModel):
         Returns:
             Measurement: New Measurement object with noise-augmented data.
         """
+        key = jax.random.PRNGKey(seed)
         data = {
             sp: self._jitter_data(
                 x=self.data[sp],  # type: ignore
                 sigma=sigma,
-                seed=seed,
+                key=jax.random.fold_in(key, k),  # independent noise per species
                 multiplicative=multiplicative,
             )
-            for sp in self.data.keys()
+            for k, sp in enumerate(self.data.keys())
         }
 
         return Measurement(
@@ -775,7 +776,7 @@ class Measurement(BaseModel):
     def _jitter_data(
         x: jax.Array,
         sigma: float,
-        seed: int,
+        key: jax.Array,
         multiplicative: bool = False,
     ) -> jax.Array:
         """Add random noise to data.
@@ -783,15 +784,13 @@ class Measurement(BaseModel):
         Args:
             x (jax.Array): Original data array.
             sigma (float): Standard deviation of the noise.
-            seed (int): Random seed.
+            key (jax.Array): JAX random key.
             multiplicative (bool): If True, apply multiplicative noise (1 + noise).
                                   If False, apply additive noise.
 
         Returns:
             jax.Array: Data with added noise.
         """
-        key = jax.random.PRNGKey(seed)
-
         if multiplicative:
             noise = jax.random.normal(key, shape=x.shape, dtype=x.dtype) * sigma + 1.0
             return x * noise
