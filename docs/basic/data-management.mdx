@@ -294,9 +294,8 @@ Data augmentation is a powerful technique for increasing dataset size and divers
 # Add controlled noise to create variations
 augmented_dataset = dataset.augment(
     n_augmentations=10,      # Create 10 noisy copies of each measurement
-    sigma=0.02,              # 2% noise level
+    noise=ctx.noise.Proportional(cv=0.02, floor=0.01),  # 2% of the signal, at least 0.01
     seed=42,                 # For reproducibility
-    multiplicative=True      # Use multiplicative rather than additive noise
 )
 
 print(f"Original dataset: {len(dataset.measurements)} measurements")
@@ -310,28 +309,32 @@ synthetic_only = dataset.augment(
 )
 ```
 
-This technique is particularly valuable when preparing datasets for machine learning applications or when you need to test the robustness of analysis methods.
+Every measurement, copy and species gets its own independent Gaussian noise, and the same `seed` reproduces it. This technique is particularly valuable when preparing datasets for machine learning applications or when you need to test the robustness of analysis methods.
 
 ### Controlling Augmentation Parameters
 
 The augmentation process can be fine-tuned to match the characteristics of your experimental system:
 
+The noise is described by a noise model from `ctx.noise`, the same objects that weight least squares (`ctx.optimize(noise=...)`) and set the likelihood in Bayesian inference (`HMC.run(noise=...)`). Generate and fit with the same noise model:
+
 ```python
-# Different noise models for different scenarios
+# Constant noise: y + N(0, 0.5)
 additive_noise = dataset.augment(
     n_augmentations=5,
-    sigma=0.5,               # Absolute noise level
-    multiplicative=False     # Additive Gaussian noise
+    noise=ctx.noise.Homoskedastic(0.5),
 )
 
-multiplicative_noise = dataset.augment(
-    n_augmentations=5,
-    sigma=0.02,              # Relative noise level (2%)
-    multiplicative=True      # Multiplicative noise (percentage-based)
-)
+# Proportional noise: y + N(0, sqrt(0.01**2 + (0.02 * y)**2))
+noise = ctx.noise.Proportional(cv=0.02, floor=0.01)
+proportional_noise = dataset.augment(n_augmentations=5, noise=noise)
+
+# ... and fit with the noise you generated
+result = ctx.optimize(model, proportional_noise, noise=noise)
 ```
 
-Multiplicative noise is often more realistic for concentration measurements, as measurement errors typically scale with the magnitude of the signal.
+Proportional noise is often more realistic for concentration measurements, as measurement errors typically scale with the magnitude of the signal; the floor is the noise that remains near zero (the detection limit).
+
+`sigma` is a shorthand: `sigma=s` adds `N(0, s)`, the same as `Homoskedastic(s)`; with `multiplicative=True` it multiplies by `1 + N(0, s)`, which is `Proportional(cv=s)` without a floor. Give either `sigma` or `noise`. A noise model whose fields are priors can only be fitted, not used to generate data.
 
 ## Data Splitting and Cross-Validation
 

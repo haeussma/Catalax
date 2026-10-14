@@ -96,12 +96,12 @@ Prepare your experimental dataset for Bayesian analysis. The quality and quantit
 # Load experimental data
 dataset = ctx.Dataset.from_croissant("experimental_data.zip")
 
-# Add realistic experimental noise to understand its impact
+# Add realistic experimental noise to understand its impact:
+# 5% of the signal, at least 0.01 (data units)
 dataset = dataset.augment(
     n_augmentations=1,      # Create one noisy version
-    sigma=0.05,             # 5% measurement noise
-    multiplicative=True,    # Noise proportional to signal
-    append=False           # Replace original with noisy version
+    noise=ctx.noise.Proportional(cv=0.05, floor=0.01),
+    append=False            # Replace original with noisy version
 )
 
 # Visualize the data you'll be fitting
@@ -125,18 +125,24 @@ The quality of your Bayesian inference depends heavily on experimental data char
 Configure the HMC sampler with appropriate settings for your system complexity and desired precision:
 
 ```python
+import numpyro.distributions as dist
+
 # Configure HMC sampler
 hmc = cmc.HMC(
     num_warmup=1000,        # Warmup samples to tune sampler
     num_samples=2000,       # Posterior samples to collect, per chain
+    likelihood=dist.Normal, # Gaussian noise, as generated in Step 2
     verbose=1               # Show progress during sampling
 )
 
-# Run MCMC inference
+# Run MCMC inference with the noise model of the data
 results = hmc.run(
     model=model,
     dataset=dataset,
-    yerrs=0.1              # Measurement error standard deviation
+    noise=ctx.noise.Proportional(
+        cv=cmc.priors.LogNormal(mu=0.1, sigma=1.0),  # unknown: sampled
+        floor=0.01,                                  # known: fixed
+    ),
 )
 ```
 
@@ -147,7 +153,9 @@ Each configuration parameter affects the quality and efficiency of your inferenc
 - **`num_warmup`**: Adaptation period where the sampler learns optimal step sizes and mass matrix. Should be at least 500-1000 for complex models
 - **`num_samples`**: Number of posterior samples to collect. More samples provide better approximation of the posterior distribution
 - **`num_chains`**: Multiple independent chains enable convergence diagnostics (R-hat). The default is 4, run in parallel (`chain_method="parallel"`): `import catalax` sets one CPU device per core. To choose the core count, call `ctx.set_host_count(n)` right after `import catalax`, before simulating or fitting
-- **`yerrs`**: Measurement error standard deviation. This should reflect the actual uncertainty in your experimental measurements
+- **`likelihood`**: Shape of the noise distribution (default `dist.SoftLaplace`). Use `dist.Normal` for Gaussian noise
+- **`noise`** (in `run`): Standard deviation of every observation, from a noise model in `ctx.noise` (see **Observation noise** below). Use the noise model your data were generated or measured with
+- **`yerrs`** (in `run`): Without `noise`, one constant noise level `sigma` is sampled for all points; `yerrs` only sets the scale of its prior. Give either `yerrs` or `noise`
 
 **Advanced Configuration Options**
 
@@ -170,20 +178,7 @@ hmc = cmc.HMC(
 
 **Observation noise**
 
-By default the noise level is sampled as `sigma`, with `yerrs` setting the scale of its prior. If you know the noise, pass `noise=` to `run` instead; it replaces the sampled `sigma`; give either `yerrs` or `noise`, not both. A fixed array (or float) of standard deviations gives the same likelihood as weighted least squares in `ctx.optimize`. A noise model from `ctx.noise` is evaluated on the model prediction, whereas `ctx.optimize` evaluates it on the measured data, so passing the same noise *object* to both gives different likelihoods (HMC's also depends on θ through log sd). For identical likelihoods, compute `sd = noise.scale(data)` once and pass that same array to both, with `likelihood=dist.Normal`. Any field of the noise model that is a prior is sampled, under the site names `sigma`, `cv` and `floor`:
-
-```python
-import numpyro.distributions as dist
-
-results = cmc.HMC(num_warmup=1000, num_samples=2000, likelihood=dist.Normal).run(
-    model=model,
-    dataset=dataset,
-    noise=ctx.noise.Proportional(
-        cv=cmc.priors.LogNormal(mu=0.035, sigma=0.4),  # sampled
-        floor=0.006,                                    # fixed
-    ),
-)
-```
+`noise=` describes the standard deviation of every observation; `likelihood` gives the distribution's shape around the prediction. Without `noise`, one constant `sigma` is sampled for all points, with `yerrs` setting the scale of its prior; give either `yerrs` or `noise`, not both. `ctx.noise.Homoskedastic(sigma)` is constant noise, `ctx.noise.Proportional(cv, floor)` is `sqrt(floor**2 + (cv * y)**2)`, the usual model for concentrations. A fixed array (or float) of standard deviations gives the same likelihood as weighted least squares in `ctx.optimize`. A noise model from `ctx.noise` is evaluated on the model prediction, whereas `ctx.optimize` evaluates it on the measured data, so passing the same noise *object* to both gives different likelihoods (HMC's also depends on θ through log sd). For identical likelihoods, compute `sd = noise.scale(data)` once and pass that same array to both, with `likelihood=dist.Normal`. Any field of the noise model that is a prior is sampled, under the site names `sigma`, `cv` and `floor`, as `cv` in Step 3; a number is kept fixed. The same noise model with numbers can generate the data (`dataset.augment(noise=...)`) and weight least squares (`ctx.optimize(noise=...)`).
 
 A prior on `floor` must keep its density away from 0 (for example `LogNormal`, not `Uniform(0, ·)`): where the data equal the prediction (e.g. a product at 0 at t = 0) the likelihood grows like 1/floor.
 

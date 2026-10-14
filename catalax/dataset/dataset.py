@@ -35,6 +35,7 @@ from matplotlib.figure import Figure
 from pydantic import BaseModel, Field
 
 from catalax.dataset.metrics import FitMetrics
+from catalax.noise import NoiseModel
 from catalax.objectives import l1_loss
 from catalax.predictor import Predictor
 
@@ -1198,10 +1199,11 @@ class Dataset(BaseModel):
     def augment(
         self,
         n_augmentations: int,
-        sigma: float = 0.5,
+        sigma: float | None = None,
         seed: int = 42,
         append: bool = True,
         multiplicative: bool = False,
+        noise: NoiseModel | None = None,
     ) -> "Dataset":
         """Generate augmented versions of the dataset with added noise.
 
@@ -1209,16 +1211,27 @@ class Dataset(BaseModel):
         Gaussian noise to the measurements, which can be useful for
         uncertainty quantification and model robustness testing.
 
+        The noise is independent for every measurement, augmentation round and
+        species; the same ``seed`` reproduces it. Give either ``sigma`` or ``noise``
+        (``sigma=0.5`` if neither).
+
         Args:
             n_augmentations: Number of augmented copies to generate
-            sigma: Standard deviation of the Gaussian noise
+            sigma: Standard deviation of the Gaussian noise. Additive: ``y + N(0, sigma)``,
+                the same as ``noise=Homoskedastic(sigma)``. Multiplicative:
+                ``y * (1 + N(0, sigma))``, ``Proportional(cv=sigma)`` without a floor.
             seed: Random seed for reproducibility
             append: Whether to include original measurements in the result
-            multiplicative: Whether to use multiplicative rather than additive noise
+            multiplicative: Whether ``sigma`` is relative rather than absolute
+            noise: Noise model with fixed values, ``y + N(0, noise.scale(y))``. Pass the
+                same object to ``optimize`` or ``HMC.run`` to fit the noise you generated.
 
         Returns:
             A new Dataset containing the augmented measurements
         """
+        if sigma is None and noise is None:
+            sigma = 0.5
+
         # Create new dataset or copy existing
         if append:
             augmented_dataset = deepcopy(self)
@@ -1242,6 +1255,7 @@ class Dataset(BaseModel):
                         # every curve the same noise pattern
                         seed=seed + i * n + j,
                         multiplicative=multiplicative,
+                        noise=noise,
                     )
                 )
 

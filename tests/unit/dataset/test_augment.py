@@ -1,6 +1,7 @@
 """Dataset.augment: independent noise for every measurement, round and species."""
 
 import jax.numpy as jnp
+import pytest
 
 import catalax as ctx
 
@@ -37,3 +38,28 @@ def test_the_same_seed_reproduces_the_noise():
     first = _noise(_dataset().augment(n_augmentations=1, sigma=0.1, seed=3, append=False))
     second = _noise(_dataset().augment(n_augmentations=1, sigma=0.1, seed=3, append=False))
     assert all(jnp.array_equal(a, b) for a, b in zip(first, second))
+
+
+def test_noise_model_gives_the_same_noise_as_sigma():
+    """Homoskedastic(s) is additive sigma=s; Proportional is multiplicative plus its floor."""
+    additive = _noise(_dataset().augment(n_augmentations=1, sigma=0.1, append=False))
+    homoskedastic = _noise(_dataset().augment(n_augmentations=1, noise=ctx.noise.Homoskedastic(0.1), append=False))
+    assert all(jnp.allclose(a, b) for a, b in zip(additive, homoskedastic))
+
+    # data are 1.0, so the proportional sd is sqrt(floor**2 + cv**2)
+    multiplicative = _noise(_dataset().augment(n_augmentations=1, sigma=0.1, multiplicative=True, append=False))
+    proportional = _noise(
+        _dataset().augment(n_augmentations=1, noise=ctx.noise.Proportional(cv=0.1, floor=0.1), append=False)
+    )
+    assert all(jnp.allclose(p, m * jnp.sqrt(2.0)) for p, m in zip(proportional, multiplicative))
+
+
+def test_noise_and_sigma_together_or_priors_raise():
+    with pytest.raises(ValueError, match="either sigma"):
+        _dataset().augment(n_augmentations=1, sigma=0.1, noise=ctx.noise.Homoskedastic(0.1))
+    with pytest.raises(ValueError, match="multiplicative"):
+        _dataset().augment(n_augmentations=1, multiplicative=True, noise=ctx.noise.Homoskedastic(0.1))
+    with pytest.raises(ValueError, match="priors"):
+        _dataset().augment(
+            n_augmentations=1, noise=ctx.noise.Proportional(cv=ctx.mcmc.priors.LogNormal(mu=0.1, sigma=1.0), floor=0.01)
+        )

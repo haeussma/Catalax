@@ -24,6 +24,8 @@ from pydantic import (
 from pydantic.config import ConfigDict
 from pydantic.fields import computed_field
 
+from catalax.noise import NoiseModel, as_noise_model
+
 # HDI visualization constants
 HDI_95_ALPHA = 0.1
 HDI_50_ALPHA = 0.35
@@ -740,30 +742,48 @@ class Measurement(BaseModel):
     # Data Augmentation Methods
     def augment(
         self,
-        sigma: float,
-        seed: int,
+        sigma: float | None = None,
+        seed: int = 42,
         multiplicative: bool = False,
+        noise: NoiseModel | None = None,
     ) -> "Measurement":
         """Create a new Measurement with noise-augmented data.
 
+        Every species gets its own independent Gaussian noise; the same ``seed``
+        reproduces it. Give either ``sigma`` (with ``multiplicative``) or ``noise``.
+
         Args:
-            sigma (float): Standard deviation of the Gaussian noise.
+            sigma (float): Noise standard deviation. Additive: ``y + N(0, sigma)``, in
+                data units, the same as ``noise=Homoskedastic(sigma)``. Multiplicative:
+                ``y * (1 + N(0, sigma))``, relative, ``Proportional(cv=sigma)`` without a floor.
             seed (int): Random seed for reproducibility.
-            multiplicative (bool): If True, noise is multiplicative rather than additive.
+            multiplicative (bool): If True, ``sigma`` is relative rather than absolute.
+            noise (NoiseModel): Noise model with fixed values: ``y + N(0, noise.scale(y))``.
+                Pass the same object to ``optimize`` or ``HMC.run`` to fit the noise you generated.
 
         Returns:
             Measurement: New Measurement object with noise-augmented data.
+
+        Raises:
+            ValueError: If both ``sigma`` and ``noise`` (or neither) are given, or
+                ``noise`` holds priors.
         """
+        if (sigma is None) == (noise is None):
+            raise ValueError("Give either sigma (with multiplicative) or noise, not both or neither.")
+        if noise is not None and multiplicative:
+            raise ValueError("multiplicative only applies to sigma; use noise=Proportional(...) instead.")
+        if noise is not None:
+            noise = as_noise_model(noise, fixed=True)
+
         key = jax.random.PRNGKey(seed)
-        data = {
-            sp: self._jitter_data(
-                x=self.data[sp],  # type: ignore
-                sigma=sigma,
-                key=jax.random.fold_in(key, k),  # independent noise per species
-                multiplicative=multiplicative,
-            )
-            for k, sp in enumerate(self.data.keys())
-        }
+        data = {}
+        for k, sp in enumerate(self.data.keys()):
+            x = jnp.asarray(self.data[sp])
+            species_key = jax.random.fold_in(key, k)  # independent noise per species
+            if noise is None:
+                data[sp] = self._jitter_data(x=x, sigma=sigma, key=species_key, multiplicative=multiplicative)  # type: ignore
+            else:
+                data[sp] = x + jax.random.normal(species_key, shape=x.shape, dtype=x.dtype) * noise.scale(x)
 
         return Measurement(
             data=data,  # type: ignore
