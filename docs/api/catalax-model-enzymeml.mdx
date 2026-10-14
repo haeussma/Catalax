@@ -7,7 +7,49 @@ sidebarTitle: enzymeml
 
 ## Functions
 
-### `from_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/enzymeml.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `to_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/enzymeml.py#L12" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_enzymeml(model: Model, enzmldoc: Optional[pe.EnzymeMLDocument] = None) -> pe.EnzymeMLDocument
+```
+
+
+Convert a Catalax Model to a PyEnzyme EnzymeMLDocument.
+
+This function transforms a Catalax model into an EnzymeML document format,
+preserving all model components including states, parameters, reactions,
+ODEs, and assignments. If an existing document is provided, it will be
+updated with the model's information.
+
+**Args:**
+- `model`: The Catalax model to convert
+- `enzmldoc`: Optional existing EnzymeML document to update. If None,
+     creates a new document with the model's name
+
+**Returns:**
+- An EnzymeMLDocument containing all the model's components
+
+
+### `update_object` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/enzymeml.py#L264" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+update_object(object: BaseModel, overwrite_strings: bool = False, **kwargs) -> None
+```
+
+
+Update a Pydantic BaseModel object with the given keyword arguments.
+
+This utility function selectively updates object attributes, with special
+handling for string fields to preserve existing values when desired.
+
+**Args:**
+- `object`: The Pydantic BaseModel object to update
+- `overwrite_strings`: If False, existing string values are preserved.
+              If True, string values are updated with new values.
+- `**kwargs`: Keyword arguments representing attribute names and their new values
+
+
+### `from_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/enzymeml.py#L293" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_enzymeml(cls: Type[Model], enzmldoc: pe.EnzymeMLDocument, name: str | None = None) -> Model

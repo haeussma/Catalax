@@ -7,7 +7,7 @@ sidebarTitle: reaction
 
 ## Classes
 
-### `Reaction` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L10" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `Reaction` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L12" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 A chemical reaction with reactants, products, and kinetic properties.
@@ -16,13 +16,19 @@ This class represents a chemical reaction that can be reversible or irreversible
 with specified reactants and products. It inherits from Equation to provide
 kinetic modeling capabilities.
 
+**Attributes:**
+- `name`: The name or identifier of the reaction
+- `reactants`: List of reactant states with their stoichiometric coefficients
+- `products`: List of product states with their stoichiometric coefficients
+- `reversible`: Whether the reaction can proceed in both directions
+
 
 **Methods:**
 
-#### `from_scheme` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L30" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_scheme` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L32" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-from_scheme(cls, name: str, schema: str, equation: str, reversible: bool) -> Reaction
+from_scheme(cls, symbol: str, schema: str, equation: str | Expr, reversible: bool, states: Optional[List[str]] = None) -> Reaction
 ```
 
 Create a Reaction from a schema string.
@@ -62,7 +68,7 @@ Supported arrow variants:
 - `ValueError`: If a term cannot be parsed
 
 
-### `ReactionElement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L165" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `ReactionElement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L184" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 A state participating in a reaction with its stoichiometric coefficient.
@@ -71,10 +77,14 @@ This class represents a single state in a chemical reaction along with
 its stoichiometric coefficient, which determines how many molecules of
 the state participate in the reaction.
 
+**Attributes:**
+- `state`: The name or identifier of the chemical state
+- `stoichiometry`: The stoichiometric coefficient (number of molecules)
+
 
 **Methods:**
 
-#### `from_tuple` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L181" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_tuple` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/reaction.py#L200" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_tuple(cls, tuple: Tuple[float, str]) -> ReactionElement

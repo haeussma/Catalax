@@ -1,0 +1,51 @@
+---
+title: hill_type
+sidebarTitle: hill_type
+---
+
+# `catalax.laws.hill_type`
+
+
+
+Hill-type Rate Law kinetic law functions.
+
+This module contains kinetic law functions for the "Hill-type Rate Law" category.
+Functions are auto-generated from SBO kinetic law definitions.
+
+
+## Functions
+
+### `hill_type_microscopic_form` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/hill_type.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+hill_type_microscopic_form(r: Annotated[str, 'Concentration of reactant'], V_max: Annotated[str, 'Maximal velocity'] = 'V_max', K: Annotated[str, 'Pseudo-dissociation constant'] = 'K') -> Expr
+```
+
+
+Hill equation rewritten by creating a pseudo-microscopic constant, equal to the Hill constant powered to the opposite of the Hill coefficient.
+
+**Args:**
+- `r`: Concentration of reactant
+- `V_max`: Maximal velocity
+- `K`: Pseudo-dissociation constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `hill_type_reduced_form` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/hill_type.py#L42" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+hill_type_reduced_form(r: Annotated[str, 'Concentration of reactant'], V_max: Annotated[str, 'Maximal velocity'] = 'V_max') -> Expr
+```
+
+
+Hill equation rewritten by replacing the concentration of reactant with its reduced form, that is the concentration divide by a pseudo-microscopic constant, equal to the Hill constant powered to the opposite of the Hill coefficient.
+
+**Args:**
+- `r`: Concentration of reactant
+- `V_max`: Maximal velocity
+
+**Returns:**
+- The kinetic law equation as a string
+

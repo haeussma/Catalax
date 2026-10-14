@@ -1,0 +1,96 @@
+---
+title: activation
+sidebarTitle: activation
+---
+
+# `catalax.laws.activation`
+
+
+
+Activation kinetic law functions.
+
+This module contains kinetic law functions for the "Activation" category.
+Functions are auto-generated from SBO kinetic law definitions.
+
+
+## Functions
+
+### `irreversible_substrate_activation` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/activation.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+irreversible_substrate_activation(s: Annotated[str, 'Concentration of substrate'], V: Annotated[str, 'Forward maximal velocity'] = 'V', K_sc: Annotated[str, 'Dissociation constant'] = 'K_sc', K_sa: Annotated[str, 'Dissociation constant'] = 'K_sa') -> Expr
+```
+
+
+This enzymatic rate law is available only for irreversible reactions, with one substrate and one product. There is a second binding site for the enzyme which, when occupied, activates the enzyme. Substrate binding at either site can occur at random.
+
+**Args:**
+- `s`: Concentration of substrate
+- `V`: Forward maximal velocity
+- `K_sc`: Dissociation constant
+- `K_sa`: Dissociation constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `irrreversible_mixed_activation` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/activation.py#L48" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+irrreversible_mixed_activation(s: Annotated[str, 'Concentration of substrate'], a: Annotated[str, 'Concentration of activator'], K_ms: Annotated[str, 'Michaelis constant for substrate'] = 'K_ms', V: Annotated[str, 'Forward maximal velocity'] = 'V', K_as: Annotated[str, 'Activation constant'] = 'K_as', K_ac: Annotated[str, 'Activation constant'] = 'K_ac') -> Expr
+```
+
+
+Enzymatic rate law where the activator enhances the rate of reaction through specific and catalytic effects, which increase the apparent limiting rate and decrease apparent Michaelis constant. The activator can bind irreversibly both free enzyme and enzyme-substrate complex, while the substrate can bind only to enzyme-activator complex. Catalytic activity is seen only when enzyme, substrate and activator are complexed.
+
+**Args:**
+- `s`: Concentration of substrate
+- `a`: Concentration of activator
+- `K_ms`: Michaelis constant for substrate
+- `V`: Forward maximal velocity
+- `K_as`: Activation constant
+- `K_ac`: Activation constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `irreversible_catalytic_activation_with_one_activator` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/activation.py#L85" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+irreversible_catalytic_activation_with_one_activator(s: Annotated[str, 'Concentration of substrate'], a: Annotated[str, 'Concentration of activator'], K_ms: Annotated[str, 'Michaelis constant for substrate'] = 'K_ms', V: Annotated[str, 'Forward maximal velocity'] = 'V', K_a: Annotated[str, 'Activation constant'] = 'K_a') -> Expr
+```
+
+
+Enzymatic rate law where an activator enhances the rate of reaction by increasing the apparent limiting rate; The activator binding to the enzyme-substrate complex (irreversibly) is required for enzyme catalytic activity (to generate the product).
+
+**Args:**
+- `s`: Concentration of substrate
+- `a`: Concentration of activator
+- `K_ms`: Michaelis constant for substrate
+- `V`: Forward maximal velocity
+- `K_a`: Activation constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `irreversible_specific_activation` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/activation.py#L119" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+irreversible_specific_activation(s: Annotated[str, 'Concentration of substrate'], a: Annotated[str, 'Concentration of activator'], K_ms: Annotated[str, 'Michaelis constant for substrate'] = 'K_ms', V: Annotated[str, 'Forward maximal velocity'] = 'V', K_a: Annotated[str, 'Activation constant'] = 'K_a') -> Expr
+```
+
+
+Enzymatic rate law for one substrate, one product and one modifier which acts as an activator. The activator enhances the rate of reaction by decreasing the apparent Michaelis constant. The activator must bind to the enzyme before the enzyme can bind the substrate.
+
+**Args:**
+- `s`: Concentration of substrate
+- `a`: Concentration of activator
+- `K_ms`: Michaelis constant for substrate
+- `V`: Forward maximal velocity
+- `K_a`: Activation constant
+
+**Returns:**
+- The kinetic law equation as a string
+

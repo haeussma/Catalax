@@ -1,0 +1,64 @@
+---
+title: information
+sidebarTitle: information
+---
+
+# `catalax.doe.information`
+
+
+Fisher information of an experimental design.
+
+Sensitivities are taken with respect to the **log** of the free parameters, so
+the information is dimensionless and a design's score does not depend on the
+units a parameter is reported in.
+
+
+## Functions
+
+### `fisher_information` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/doe/information.py#L51" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+fisher_information(model: Model, design: Dataset, noise: NoiseModel | float) -> Information
+```
+
+
+Computes the Fisher information of a design at the model's parameter values.
+
+``F = sum W.T @ W`` over measurements, sampling times and observable states,
+with ``W = noise.whiten(dy/dlog(theta), y)``. Only parameters with
+``constant=False`` are rows/columns; constant ones enter at their ``value``.
+
+**Args:**
+- `model`: Model whose parameter values the information is linearised around.
+- `design`: Dataset of initial-condition-only measurements, one per
+experimental arm, built with ``Dataset.add_initial(time=..., **ics)``.
+``time`` holds the sampling times.
+- `noise`: Observation noise model; a bare float means ``Homoskedastic``.
+- `config`: Solver configuration. Defaults to Tsit5 with tight tolerances
+(rtol = atol = 1e-8, max_steps = 4096, throw = False). Sensitivities
+are integrated alongside the states, so a stiff solver runs Newton on
+the whole augmented system\: for one MAT arm (standalone diffrax probe),
+a design gradient took Kvaerno5 310 steps and 34 ms, Tsit5 75 steps
+and 2 ms.
+
+**Returns:**
+- The information matrix, its parameter order and a validity flag.
+
+**Raises:**
+- `ValueError`: If a parameter value is missing or not positive, or the
+design is incomplete.
+
+
+## Classes
+
+### `Information` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/doe/information.py#L36" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Fisher information of a design at one parameter vector.
+
+**Attributes:**
+- `matrix`: Symmetric ``(n_free, n_free)`` information in log parameters.
+Always finite; points whose solve failed contribute nothing.
+- `parameter_order`: Names of the free parameters, the row/column order.
+- `valid`: False if any observed point failed to solve.
+

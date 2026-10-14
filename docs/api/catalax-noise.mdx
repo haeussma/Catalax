@@ -1,0 +1,201 @@
+---
+title: noise
+sidebarTitle: noise
+---
+
+# `catalax.noise`
+
+
+Observation-noise models, shared by least squares, Bayesian inference and design.
+
+A noise model gives the standard deviation of every observation, ``scale(prediction)``. ``optimize`` evaluates it on the measured data (fixed weights), ``HMC`` on the model prediction, the design code uses it to whiten sensitivities.
+
+A noise model enters the Fisher information only by whitening sensitivities,
+``W = noise.whiten(S, y)`` and ``F = W.T @ W``. This keeps ``F`` a sum of one
+rank-1 term per observation, which only holds for diagonal (uncorrelated) noise;
+correlated noise is deliberately not supported.
+
+No distribution family is needed: for any location-scale family the information
+is ``I_f / sigma**2 * S.T @ S`` with ``I_f`` a constant, so the tail shape scales
+every design's score equally and never moves the optimum. It belongs in the
+inference likelihood, not here.
+
+
+## Functions
+
+### `prior_fields` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L55" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+prior_fields(noise) -> dict
+```
+
+
+The fields of a noise model that are priors (to be sampled), by name.
+
+A noise model that is not a dataclass (structural ``NoiseModel``) has none: only
+dataclass fields (equinox Modules such as the built-in models) are recognised as
+priors. An array-valued field with a prior is sampled as one scalar site.
+
+
+### `sample_noise` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L71" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+sample_noise(noise)
+```
+
+
+Inside a numpyro model: the noise model with every prior field replaced by a sample.
+
+Each prior is sampled as a site named after its field (``sigma``, ``cv``, ``floor``).
+A noise model without priors is returned unchanged.
+
+
+### `as_noise_model` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L193" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+as_noise_model(noise: NoiseModel | float | jax.Array, fixed: bool = False) -> NoiseModel
+```
+
+
+Coerces a bare noise standard deviation to ``Homoskedastic``.
+
+**Args:**
+- `noise`: A ``NoiseModel``, or a noise standard deviation.
+- `fixed`: Raise if any field is a prior (the design code needs numbers).
+
+**Returns:**
+- ``noise`` unchanged if it already is a ``NoiseModel``, else
+- ``Homoskedastic(noise)``.
+
+
+## Classes
+
+### `NoiseModel` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L28" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Whitens sensitivities by the per-point observation noise scale.
+
+Structural: any object with matching ``scale`` and ``whiten`` methods is a
+``NoiseModel``, no subclassing needed. Only dataclass fields (equinox Modules)
+can hold priors for HMC to sample.
+
+
+**Methods:**
+
+#### `scale` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L36" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+scale(self, prediction: jax.Array) -> jax.Array
+```
+
+Per-point noise standard deviation, shaped like ``prediction``.
+
+
+#### `whiten` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L40" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+whiten(self, sensitivities: jax.Array, prediction: jax.Array) -> jax.Array
+```
+
+Sensitivity rows divided by their own point's ``scale``.
+
+
+### `Homoskedastic` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L84" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Constant additive noise, ``y ~ Normal(y_hat, sigma)``.
+
+``sigma`` is a dynamic pytree leaf (not static), so it can carry a batch of
+values under ``vmap`` and never silently hits a stale ``jit`` cache entry.
+
+Any field may be a catalax.mcmc.priors prior instead of a number; HMC then
+samples it. The design code needs numbers.
+
+**Attributes:**
+- `sigma`: Noise standard deviation in data units; a scalar, or one value per data point (an array broadcastable to the data).
+
+
+**Methods:**
+
+#### `scale` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L105" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+scale(self, prediction: jax.Array) -> jax.Array
+```
+
+Returns ``sigma`` broadcast to the shape of ``prediction``.
+
+**Args:**
+- `prediction`: Predicted observations; only the shape is used.
+
+**Returns:**
+- Array shaped like ``prediction``.
+
+
+#### `whiten` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L116" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+whiten(self, sensitivities: jax.Array, prediction: jax.Array) -> jax.Array
+```
+
+Divides every sensitivity by ``sigma``.
+
+**Args:**
+- `sensitivities`: Shape ``prediction.shape + (n_parameters,)``.
+- `prediction`: Predicted observations.
+
+**Returns:**
+- Array shaped like ``sensitivities``.
+
+
+### `Proportional` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L129" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Constant-plus-proportional noise, ``sd(y) = sqrt(floor**2 + (cv * y)**2)``.
+
+The typical HPLC model: error proportional to the measured amount, with a
+detection floor near zero. Two approximations are made: the variance term of
+the Gaussian information is dropped (its ratio to the mean term is
+``2 * cv**2``, 0.5% at cv = 5%), and this is also the information of
+``y ~ LogNormal(log y_hat, cv)`` in the limit ``floor -> 0``.
+
+Any field may be a catalax.mcmc.priors prior instead of a number; HMC then
+samples it. The design code needs numbers.
+
+**Attributes:**
+- `cv`: Relative standard deviation of the proportional component.
+- `floor`: Standard deviation floor in data units, strictly positive.
+
+
+**Methods:**
+
+#### `scale` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L169" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+scale(self, prediction: jax.Array) -> jax.Array
+```
+
+Returns ``sqrt(floor**2 + (cv * prediction)**2)``.
+
+**Args:**
+- `prediction`: Predicted observations.
+
+**Returns:**
+- Array shaped like ``prediction``.
+
+
+#### `whiten` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/noise.py#L180" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+whiten(self, sensitivities: jax.Array, prediction: jax.Array) -> jax.Array
+```
+
+Divides every sensitivity by the noise scale at its predicted value.
+
+**Args:**
+- `sensitivities`: Shape ``prediction.shape + (n_parameters,)``.
+- `prediction`: Predicted observations.
+
+**Returns:**
+- Array shaped like ``sensitivities``.
+

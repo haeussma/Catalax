@@ -7,37 +7,60 @@ sidebarTitle: optimization
 
 ## Functions
 
-### `optimize` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/tools/optimization.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `optimize` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/tools/optimization.py#L15" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-optimize(model: Model, dataset: Dataset, global_upper_bound: Optional[float] = 100000.0, global_lower_bound: Optional[float] = 1e-06, dt0: float = 0.01, objective_fun: Callable[[jax.Array, jax.Array], jax.Array] = optax.l2_loss, max_steps: int = 64 ** 4, method: str = 'bfgs') -> Tuple[MinimizerResult, Model]
+optimize(model: Model, dataset: Dataset, global_upper_bound: Optional[float] = 100000.0, global_lower_bound: Optional[float] = 1e-06, dt0: float = 0.01, objective_fun: Optional[Callable[[jax.Array, jax.Array], jax.Array]] = None, max_steps: int = 64 ** 4, method: str = 'least_squares', noise: Optional[NoiseModel | jax.Array | float] = None) -> Tuple[MinimizerResult, Model]
 ```
 
 
-Optimization functions to determine the parameters of a model of a system, given data.
+Fit the parameters of a model to a dataset with lmfit.
 
-This method uses the LMFit library to perform parameter inference and thus
-supports all methods provided by LMFit.
+Only the model's observable states are compared with data (states whose ODE was
+added with ``observable=False`` need initial conditions, not data), and NaN entries
+in the data (unsampled points, padding of shorter measurements) are left out.
 
-In order to perform an optimization, first specify your ODE model and configure
-the parameter objects in your model. This means to add a lower and upper bound
-for each parameter. You can also set a global upper/lower bound if you want to
-use the same bounds for all parameters. When you pass the model to this function,
-everything will be setup and a parameter optimization will be performed.
+By default this is ordinary least squares: lmfit receives the residual vector
+``simulation - data`` and minimises its sum of squares; the noise level is estimated
+from the residuals, so the standard errors are scaled by the reduced chi-square.
 
-This function returns a results object as well as an update version of your model
-including the inferred parameters. Please note, that the returned model is a modified
-COPY of your input system plus the parameter values. The input system will not be modified.
+With ``noise`` it is weighted least squares. ``noise`` is a noise model (see
+``catalax.noise``) or the standard deviations themselves (a float, or an array shaped
+like the observable data). It is evaluated once on the measured data, ``sd =
+noise.scale(data)``, and the residual becomes ``(simulation - data) / sd``. The
+standard deviations are taken as absolute: the standard errors are not rescaled, so
+report ``result.redchi`` (about 1 when the noise model fits the residuals).
+
+A per-point loss can be given instead as ``objective_fun(y_true, y_pred)`` returning a
+non-negative array; the fit then minimises the sum of that loss over the measured
+points. It cannot be combined with ``noise``.
+
+The standard errors in the result are meaningful only for the least-squares objectives
+(default or ``noise``); with a custom ``objective_fun`` they come from the Jacobian of
+``sqrt(loss)``.
+
+The returned model is a modified COPY of the input model carrying the fitted
+parameter values; the input model is not changed.
 
 **Args:**
-- `model`: The model to fit.
-- `dataset`: The dataset to fit the model to.
-- `global_upper_bound`: Global upper bound - Only applies to unspecified params. Defaults to 1e5.
-- `global_lower_bound`: Global lower bound - Only applies to unspecified params. Defaults to 1e-6.
+- `model`: The model to fit. Every parameter needs an initial value, and
+bounds unless the global bounds apply.
+- `dataset`: Data for every observable state of the model, plus initial
+conditions for all states and constants.
+- `global_upper_bound`: Upper bound for parameters
+without their own. Defaults to 1e5.
+- `global_lower_bound`: Lower bound for parameters
+without their own. Defaults to 1e-6.
 - `dt0`: Integration step width. Defaults to 0.01.
+- `objective_fun`: Per-point loss
+``(y_true, y_pred) -> array``. Defaults to None (least squares).
 - `max_steps`: Maximum number of integration steps. Defaults to 64**4.
-- `method`: Optimization method. Defaults to "bfgs".
+- `method`: lmfit method. Defaults to "least_squares". Gradient-based
+scalar methods (e.g. ``lbfgsb``, ``bfgs``) need ``ctx.enable_x64()``\: their
+finite-difference steps cannot be resolved in float32.
+- `noise`: Observation noise, as absolute
+standard deviations; see above. Defaults to None (ordinary least squares).
 
 **Returns:**
-- Tuple[MinimizerResult, Model]: Results object and updated model with inferred parameters
+- Tuple[MinimizerResult, Model]: lmfit result and the fitted copy of the model.
 

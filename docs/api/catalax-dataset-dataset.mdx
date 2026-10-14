@@ -7,13 +7,13 @@ sidebarTitle: dataset
 
 ## Classes
 
-### `DatasetType` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L49" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `DatasetType` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L50" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Enumeration of dataset types in the Catalax framework.
 
 
-### `Dataset` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L57" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `Dataset` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L58" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 A class representing a collection of experimental measurements.
@@ -22,10 +22,18 @@ This class hosts multiple measurements from an experiment and enables
 integration with other Catalax functionalities, including data processing,
 visualization, and model fitting.
 
+**Attributes:**
+- `id`: Unique identifier of the dataset
+- `states`: List of chemical states within this dataset
+- `name`: Human-readable name or identifier
+- `description`: Longer text description of the dataset
+- `measurements`: Collection of experimental measurements
+- `type`: Classification of the dataset (measurement, simulation, or prediction)
+
 
 **Methods:**
 
-#### `get_measurement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L106" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_measurement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L107" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_measurement(self, id: str) -> Measurement
@@ -43,7 +51,7 @@ Retrieve a measurement from the dataset by its ID.
 - `ValueError`: If no measurement with the given ID exists
 
 
-#### `get_observable_species_order` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L129" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_observable_species_order` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L130" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_observable_species_order(self) -> List[str]
@@ -52,7 +60,7 @@ get_observable_species_order(self) -> List[str]
 Get the ordered list of species that are observed across measurements.
 
 
-#### `get_observable_states_order` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L133" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_observable_states_order` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L134" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_observable_states_order(self) -> List[str]
@@ -70,7 +78,7 @@ consistency across different measurements in the dataset.
 - `ValueError`: If no common observable states exist across measurements
 
 
-#### `get_observable_indices` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L175" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_observable_indices` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L176" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_observable_indices(self) -> List[int]
@@ -83,7 +91,7 @@ Get the indices of observable states within the full states list.
 - states in the full states list
 
 
-#### `add_initial` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L188" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `add_initial` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L189" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 add_initial(self, time: Array | list[float] | None = None, **kwargs) -> None
@@ -98,7 +106,7 @@ Add an empty measurement with only initial conditions.
       keys are states names and values are concentrations
 
 
-#### `add_measurement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L208" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `add_measurement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L209" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 add_measurement(self, measurement: Measurement) -> None
@@ -114,7 +122,7 @@ Add a complete measurement to the dataset.
 - `ValueError`: If states in the measurement are inconsistent with dataset states
 
 
-#### `add_from_jax_array` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L243" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `add_from_jax_array` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L234" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 add_from_jax_array(self, state_order: List[str], initial_condition: Dict[str, float], data: Array, time: Array) -> None
@@ -129,7 +137,7 @@ Add a measurement from JAX arrays directly.
 - `time`: JAX array of time points
 
 
-#### `pad` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L266" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `pad` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L257" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 pad(self) -> 'Dataset'
@@ -157,7 +165,22 @@ computing this length.
 - `ValueError`: If any measurement's `initial_conditions` do not cover
 
 
-#### `to_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L346" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `shape` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L338" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+shape(self) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]
+```
+
+Get the shape of the dataset.
+
+**Returns:**
+- Tuple containing:
+- - Number of measurements
+- - Number of time points
+- - Number of states
+
+
+#### `to_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L361" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_dataframe(self) -> Tuple[pd.DataFrame, pd.DataFrame]
@@ -171,7 +194,19 @@ Export dataset as two pandas DataFrames for data and initial conditions.
 - - DataFrame with initial conditions (columns: measurementId, states...)
 
 
-#### `to_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L362" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L378" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_jax_arrays(self, state_order: List[str], inits_to_array: Literal[True]) -> tuple[Array, Array, Array]
+```
+
+#### `to_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L385" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_jax_arrays(self, state_order: List[str], inits_to_array: Literal[False] = False) -> tuple[Array, Array, List[Union[Array, Dict[str, float]]]]
+```
+
+#### `to_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L391" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_jax_arrays(self, state_order: List[str], inits_to_array: bool = False) -> tuple[Array, Array, Union[Array, List[Union[Array, Dict[str, float]]]]]
@@ -192,7 +227,7 @@ if inits_to_array=True, or a list of dictionaries mapping states names
 to initial concentrations
 
 
-#### `to_y0_matrix` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L408" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_y0_matrix` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L437" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_y0_matrix(self, state_order: List[str]) -> Array
@@ -208,7 +243,27 @@ Create a matrix of initial conditions for all measurements.
 - conditions for all measurements
 
 
-#### `has_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L425" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_time_matrix` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L454" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_time_matrix(self) -> Array
+```
+
+Create a matrix of time points for all measurements.
+
+Unlike `to_jax_arrays`, this needs no measured data, so it also works on
+measurements created with `add_initial(time=...)`, e.g. an experimental
+design.
+
+**Returns:**
+- JAX array of shape (n_measurements, n_time_points)
+
+**Raises:**
+- `ValueError`: If a measurement has no time points, or the measurements
+have different numbers of time points
+
+
+#### `has_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L488" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 has_data(self) -> bool
@@ -220,7 +275,7 @@ Check if the dataset has any data.
 - True if the dataset has any data, False otherwise
 
 
-#### `to_croissant` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L433" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_croissant` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L496" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_croissant(self, dirpath: str, license: str = 'CC BY-SA 4.0', version: str = '1.0.0', name: Optional[str] = None, cite_as: Optional[str] = None, url: Optional[str] = None, date_published: datetime = datetime.now()) -> None
@@ -242,7 +297,25 @@ the dataset to a directory structure compatible with the Croissant specification
 - `date_published`: Publication date for the dataset
 
 
-#### `from_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L483" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L541" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_enzymeml(self, enzmldoc: Optional[pe.EnzymeMLDocument] = None) -> pe.EnzymeMLDocument
+```
+
+Convert the dataset to an EnzymeML document.
+
+This function transforms a Catalax Dataset into an EnzymeML document format,
+preserving all measurement data, time points, and initial conditions. If an
+existing EnzymeML document is provided, the dataset measurements are appended
+to it.
+
+**Args:**
+- `enzmldoc`: Optional existing EnzymeML document to append to. If None,
+ a new document is created with the dataset name
+
+
+#### `from_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L564" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_enzymeml(cls, enzmldoc: pe.EnzymeMLDocument) -> Dataset
@@ -250,14 +323,22 @@ from_enzymeml(cls, enzmldoc: pe.EnzymeMLDocument) -> Dataset
 
 Create a dataset from an EnzymeML document.
 
+First scans all measurements to determine the global maximum data-array
+length (``global_max_len``), then constructs each ``Measurement`` with
+arrays padded to that common length.  Within each measurement, species
+with shorter time arrays are position-aligned onto the canonical (longest)
+time axis with ``NaN`` at unsampled positions.  Across measurements,
+shorter time arrays are extended with monotonic continuation and data
+padded with ``NaN``.
+
 **Args:**
-- `enzmldoc`: EnzymeML document containing experimental data
+- `enzmldoc`: EnzymeML document containing experimental data.
 
 **Returns:**
-- A new Dataset object with measurements extracted from the EnzymeML document
+- Dataset with uniformly-shaped measurements ready for JAX operations.
 
 
-#### `from_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L517" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L620" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_dataframe(cls, name: str, data: pd.DataFrame, inits: pd.DataFrame, meas_id: Optional[str] = None, description: Optional[str] = '') -> 'Dataset'
@@ -282,7 +363,7 @@ Create a dataset from pandas DataFrames.
 - `ValueError`: If measurement IDs are inconsistent between data and inits
 
 
-#### `from_model` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L604" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_model` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L707" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_model(cls, model: 'Model') -> 'Dataset'
@@ -300,7 +381,7 @@ Create an empty dataset with states from a model.
 - `AssertionError`: If the provided object is not a Model instance
 
 
-#### `from_croissant` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L627" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_croissant` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L730" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_croissant(cls, path: str) -> 'Dataset'
@@ -318,7 +399,7 @@ Create a dataset from a Croissant archive.
 - `AssertionError`: If measurements lack corresponding initial conditions
 
 
-#### `from_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L699" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L802" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_jax_arrays(cls, state_order: List[str], data: Array, time: Array, y0s: Array) -> 'Dataset'
@@ -339,7 +420,7 @@ Create a dataset directly from JAX arrays.
 - `AssertionError`: If array shapes are incompatible
 
 
-#### `leave_one_out` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L759" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `leave_one_out` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L862" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 leave_one_out(self)
@@ -352,7 +433,7 @@ containing a copy of the dataset with one measurement removed and the ID
 of the removed measurement.
 
 
-#### `train_test_split` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L786" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `train_test_split` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L889" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 train_test_split(self, test_size: float = 0.2)
@@ -371,19 +452,19 @@ This method splits the dataset into training and testing sets based on a specifi
 - Testing dataset
 
 
-#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L828" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L931" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot(self, ncols: int = 2, show: Literal[True] = True, path: Optional[str] = None, measurement_ids: List[str] = [], figsize: Tuple[int, int] = (5, 3), predictor: Optional[Predictor] = None, n_steps: int = 100, xlim: Optional[Tuple[float, float | None]] = (0, None), **kwargs) -> None
 ```
 
-#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L842" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L945" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot(self, ncols: int = 2, show: Literal[False] = False, path: Optional[str] = None, measurement_ids: List[str] = [], figsize: Tuple[int, int] = (5, 3), predictor: Optional[Predictor] = None, n_steps: int = 100, xlim: Optional[Tuple[float, float | None]] = (0, None), **kwargs) -> Figure
 ```
 
-#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L855" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L958" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot(self, ncols: int = 2, show: bool = False, path: Optional[str] = None, measurement_ids: List[str] = [], figsize: Tuple[int, int] = (5, 3), predictor: Optional[Predictor] = None, n_steps: int = 100, xlim: Optional[Tuple[float, float | None]] = (0, None), **kwargs) -> Optional[Figure]
@@ -408,10 +489,10 @@ optional overlay of model predictions.
 - The matplotlib figure object
 
 
-#### `augment` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1078" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `augment` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1199" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-augment(self, n_augmentations: int, sigma: float = 0.5, seed: int = 42, append: bool = True, multiplicative: bool = False) -> 'Dataset'
+augment(self, n_augmentations: int, sigma: float | None = None, seed: int = 42, append: bool = True, multiplicative: bool = False, noise: NoiseModel | None = None) -> 'Dataset'
 ```
 
 Generate augmented versions of the dataset with added noise.
@@ -420,18 +501,26 @@ This method creates artificial variants of the dataset by adding
 Gaussian noise to the measurements, which can be useful for
 uncertainty quantification and model robustness testing.
 
+The noise is independent for every measurement, augmentation round and
+species; the same ``seed`` reproduces it. Give either ``sigma`` or ``noise``
+(``sigma=0.5`` if neither).
+
 **Args:**
 - `n_augmentations`: Number of augmented copies to generate
-- `sigma`: Standard deviation of the Gaussian noise
+- `sigma`: Standard deviation of the Gaussian noise. Additive\: ``y + N(0, sigma)``,
+the same as ``noise=Homoskedastic(sigma)``. Multiplicative\:
+``y * (1 + N(0, sigma))``, ``Proportional(cv=sigma)`` without a floor.
 - `seed`: Random seed for reproducibility
 - `append`: Whether to include original measurements in the result
-- `multiplicative`: Whether to use multiplicative rather than additive noise
+- `multiplicative`: Whether ``sigma`` is relative rather than absolute
+- `noise`: Noise model with fixed values, ``y + N(0, noise.scale(y))``. Pass the
+same object to ``optimize`` or ``HMC.run`` to fit the noise you generated.
 
 **Returns:**
 - A new Dataset containing the augmented measurements
 
 
-#### `metrics` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1134" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `metrics` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1271" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 metrics(self, predictor: Predictor, objective_fun: Callable[[Array, Array], Array] = l1_loss) -> FitMetrics
@@ -466,7 +555,7 @@ Defaults to L2 loss.
 - `RuntimeError`: If observable states orders don't match between dataset and predictions
 
 
-#### `get_vmap_dims` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1200" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_vmap_dims` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1337" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_vmap_dims(data: jax.Array, time: jax.Array, y0s: Union[jax.Array, List[Dict[str, float]]]) -> Tuple[Optional[int], None, Optional[int]]
@@ -494,11 +583,20 @@ which dimensions should be mapped over when using JAX's vectorized mapping.
 - `TypeError`: If y0s is not a list or JAX array
 
 
-#### `to_config` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1240" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_config` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1377" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_config(self, nsteps: int = 100) -> SimulationConfig
 ```
 
 Convert dataset to a SimulationConfig object.
+
+
+#### `df_inits` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/dataset.py#L1396" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+df_inits(self) -> pd.DataFrame
+```
+
+DataFrame of initial conditions for the dataset.
 

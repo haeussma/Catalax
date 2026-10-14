@@ -30,7 +30,7 @@ Get the rates of the predictor.
 #### `predict_rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/surrogate.py#L34" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-predict_rates(self, dataset: Dataset) -> jax.Array
+predict_rates(self, dataset: Dataset, return_individual: bool = False) -> jax.Array
 ```
 
 Make predictions using the predictor.
@@ -43,4 +43,31 @@ Make predictions using the predictor.
 
 **Returns:**
 - Dataset containing the predictions
+
+
+#### `has_uncertainty` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/surrogate.py#L55" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+has_uncertainty(self) -> bool
+```
+
+Check if the surrogate has uncertainty.
+
+
+#### `rate_uncertainty` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/surrogate.py#L62" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+rate_uncertainty(self, dataset: Dataset) -> jax.Array
+```
+
+Get the variance of the rates of the surrogate.
+
+
+#### `rate_sigma` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/surrogate.py#L69" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+rate_sigma(self, dataset: Dataset) -> jax.Array
+```
+
+Get the standard deviation of the rates of the surrogate.
 

@@ -1,0 +1,231 @@
+---
+title: ensemble
+sidebarTitle: ensemble
+---
+
+# `catalax.neural.ensemble`
+
+## Classes
+
+### `NeuralODEEnsemble` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L33" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+Ensemble of neural ODE models for robust predictions and uncertainty quantification.
+
+This class combines multiple neural ODE models into an ensemble that can provide
+more robust predictions and uncertainty estimates. It implements both Predictor
+and Surrogate interfaces, allowing it to be used for forward predictions and
+as a surrogate model for MCMC sampling.
+
+The ensemble aggregates predictions from all constituent models, typically by
+taking the mean, but can also provide uncertainty bounds through HDI (Highest
+Density Interval) calculations.
+
+**Attributes:**
+- `models`: List of neural ODE models that comprise the ensemble
+- `state_order`: Order of state variables, must be consistent across all models
+
+
+**Methods:**
+
+#### `get_state_order` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L73" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_state_order(self) -> list[str]
+```
+
+Get the state order of the predictor.
+
+**Returns:**
+- List of state variable names in order
+
+
+#### `get_species_order` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L81" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+get_species_order(self) -> list[str]
+```
+
+Get the species order of the predictor.
+
+**Returns:**
+- List of species names in order
+
+
+#### `n_parameters` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L89" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+n_parameters(self) -> int
+```
+
+Get the total number of parameters across all models in the ensemble.
+
+**Returns:**
+- Total number of parameters summed across all models
+
+
+#### `has_hdi` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L97" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+has_hdi(self) -> bool
+```
+
+Check if the ensemble has HDI.
+
+**Returns:**
+- True if the ensemble has HDI, False otherwise
+
+
+#### `has_uncertainty` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L106" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+has_uncertainty(self) -> bool
+```
+
+Check if the ensemble has uncertainty.
+
+**Returns:**
+- True if the ensemble has uncertainty, False otherwise
+
+
+#### `predict` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L115" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+predict(self, dataset: Dataset, config: Optional['SimulationConfig'] = None, n_steps: int = 100, use_times: bool = False, hdi: Optional[Literal['lower', 'upper', 'lower_50', 'upper_50']] = None, solver: Optional[Type] = None, rtol: Optional[float] = None, atol: Optional[float] = None, dt0: Optional[float] = None) -> Tuple[jax.Array, jax.Array, jax.Array]
+```
+
+#### `predict` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L131" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+predict(self, dataset: Dataset, config: Optional['SimulationConfig'] = None, n_steps: int = 100, use_times: bool = False, hdi: Optional[Literal['lower', 'upper', 'lower_50', 'upper_50']] = None, solver: Optional[Type] = None, rtol: Optional[float] = None, atol: Optional[float] = None, dt0: Optional[float] = None) -> Dataset
+```
+
+#### `predict` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L146" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+predict(self, dataset: Dataset, config: Optional['SimulationConfig'] = None, n_steps: int = 100, use_times: bool = False, hdi: Optional[Literal['lower', 'upper', 'lower_50', 'upper_50']] = None, solver: Optional[Type] = None, rtol: Optional[float] = None, atol: Optional[float] = None, dt0: Optional[float] = None) -> Union[Dataset, Tuple[jax.Array, jax.Array, jax.Array]]
+```
+
+Predict model behavior using the ensemble of models.
+
+This method evaluates predictions from all models in the ensemble and
+aggregates them either by taking the mean or by computing uncertainty bounds.
+
+**Args:**
+- `dataset`: Dataset containing initial conditions for prediction
+- `config`: Optional simulation configuration parameters
+- `n_steps`: Number of time steps for the simulation
+- `use_times`: Whether to use the time points from the dataset
+- `hdi`: Optional HDI option for uncertainty quantification\:
+- "lower"\: 2.5th percentile (lower bound of 95% HDI)
+- "upper"\: 97.5th percentile (upper bound of 95% HDI)
+- "lower_50"\: 25th percentile (lower bound of 50% HDI)
+- "upper_50"\: 75th percentile (upper bound of 50% HDI)
+- None\: mean predictions
+- `solver`: Optional ODE solver to use for all models
+- `rtol`: Relative tolerance for ODE solver
+- `atol`: Absolute tolerance for ODE solver
+- `dt0`: Initial time step for ODE solver
+- `return_individual`: Whether to return individual predictions for each model
+
+**Returns:**
+- A Dataset object containing the aggregated prediction results
+
+
+#### `rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L213" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+rates(self, t: jax.Array, y: jax.Array, constants: Optional[jax.Array] = None, return_individual: bool = False) -> jax.Array
+```
+
+Get the rates of the ensemble predictor.
+
+Aggregates rates from all models in the ensemble by taking the mean.
+This method is used by the Surrogate interface for MCMC sampling.
+
+**Args:**
+- `t`: Time points array with shape (...,)
+- `y`: State array with shape (..., n_states)
+- `constants`: Optional constants array (not used by neural models)
+
+**Returns:**
+- Mean rates across all models with same shape as y
+
+
+#### `predict_rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L250" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+predict_rates(self, dataset: Dataset, return_individual: bool = False) -> jax.Array
+```
+
+Predict rates using the ensemble of models.
+
+This method extracts all time-state pairs from the dataset and computes
+the ensemble-averaged rates for each pair. Useful for analyzing model
+behavior across the entire dataset.
+
+**Args:**
+- `dataset`: Dataset containing time series data
+
+**Returns:**
+- Mean rates across all models, reshaped to (dataset_size * time_size, n_states)
+
+
+#### `rate_uncertainty` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L280" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+rate_uncertainty(self, dataset: Dataset) -> jax.Array
+```
+
+Get the standard deviation of the rates of the ensemble.
+
+**Args:**
+- `dataset`: Dataset containing initial conditions for prediction
+
+**Returns:**
+- Variance of the rates
+
+
+#### `rate_sigma` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L292" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+rate_sigma(self, dataset: Dataset) -> jax.Array
+```
+
+Get the standard deviation of the rates of the ensemble.
+
+**Args:**
+- `dataset`: Dataset containing initial conditions for prediction
+
+**Returns:**
+- Standard deviation of the rates
+
+
+#### `save_to_eqx` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L317" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+save_to_eqx(self, path: Union[Path, str] = '.', name: str = 'ensemble') -> None
+```
+
+Save the ensemble to a zip archive containing individual model files and a manifest.
+
+Each model in the ensemble is serialized as a separate file named {index}.eqx within
+the zip archive. A manifest.json file maps each filepath to its model's class name
+and module path for reloading.
+
+**Args:**
+- `path`: Path to the directory to save the zip archive
+- `name`: Name of the zip archive (without .zip extension)
+
+
+#### `from_eqx` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/ensemble.py#L378" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+from_eqx(cls, path: Union[Path, str]) -> 'NeuralODEEnsemble'
+```
+
+Load an ensemble from an eqx file.
+
+**Args:**
+- `path`: Path to the eqx file
+

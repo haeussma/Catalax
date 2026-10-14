@@ -1,0 +1,135 @@
+---
+title: optimize
+sidebarTitle: optimize
+---
+
+# `catalax.doe.optimize`
+
+
+Search the initial conditions of a design for the best worst parameter.
+
+## Functions
+
+### `optimize_design` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/doe/optimize.py#L53" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+optimize_design(model: Model, spec: Mapping[str, tuple[float, float]], noise: NoiseModel | float) -> DesignResult
+```
+
+
+Finds the initial conditions that maximise the expected maximin efficiency.
+
+Runs ``n_restarts`` Adam ascents from Latin-hypercube starts on the smoothed
+maximin ``mean_i softmin_j e_ij`` over ``n_draws`` fixed prior draws, keeps
+each restart's best point along its trajectory, and ranks the restarts on
+the hard maximin ``mean_i min_j e_ij`` over ``n_rank_draws`` separate
+draws. Every restart and every step scores against the same draws, so the
+objective is a fixed surface and restarts compare draw for draw.
+
+Bounds are enforced by ``low + (high - low) * sigmoid(z)``, never a clip:
+optima often sit on a bound (an enzyme or stock ceiling), where a clip has
+exactly zero gradient. The sampling times are fixed; optimising them
+specialises the design toward the prior median and costs the tail.
+
+**Args:**
+- `model`: Model whose free parameters (``constant=False``) all carry a
+prior with strictly positive support.
+- `spec`: ``name -> (low, high)`` for every state and constant of the model,
+with no defaults. ``low == high`` fixes that initial condition at
+``low`` in every arm; ``low < high`` lets each arm choose it inside
+the box.
+- `noise`: Observation noise model; a bare float means ``Homoskedastic``.
+- `n_arms`: Number of experiments in the design.
+- `times`: Sampling times, shared by every arm.
+- `key`: PRNG key for the starts, the ascent and ranking draws, and the
+report's draws.
+- `n_restarts`: Number of ascents. The maximin landscape has several
+basins\: in progress-doe 8 of 24 starts landed in the lower one, 14%
+short. 1 runs, but is not useful.
+- `n_steps`: Adam steps per restart.
+- `n_draws`: Prior draws the ascent averages over. Cost is linear in draws
+and in restarts. One ``value_and_grad`` on the bi-substrate model
+(4 states, 4 arms x 9 times, Tsit5, CPU, float64), and the whole
+call with the default ``n_workers`` on an M4 Pro (14 cores)\:
+
+===== ======== ====================== =======================
+draws per step 8 restarts x 300 steps 24 restarts x 600 steps
+===== ======== ====================== =======================
+16    27 ms    13 s                   41 s
+64    105 ms   22 s                   70 s
+256   499 ms   80 s                   4.6 min
+===== ======== ====================== =======================
+
+Before the restarts ran in threads, the 8 x 300 column took 36 s
+and 106 s. The first compile takes a few seconds.
+- `n_rank_draws`: Prior draws the ranking and the report average over. The
+ranking runs once per restart, so it can afford more draws than the
+ascent.
+- `learning_rate`: Adam step size in the unconstrained coordinate ``z``,
+where the box spans roughly ``[-6, 6]``.
+- `temperature`: Softmin temperature of the ascent, in efficiency units. It
+biases the smoothed value below the hard one by at most
+``temperature * log(n_free)``; 0.01 costs under 0.001.
+- `config`: Solver configuration, see ``fisher_information``.
+- `belief`: Posterior samples of an earlier round to design against
+instead of the priors, e.g. ``run_mcmc(...).get_samples()``; see
+``evaluate_design``. Every score is then relative to the belief.
+- `n_workers`: Threads that run the restarts, one jitted ascent each.
+``None`` means ``min(n_restarts, cores)``, counting the cores this
+process may use\: SLURM and ``taskset`` are honoured, a Docker
+``--cpus`` quota is not, so set it there. JAX releases the GIL while
+compiled code runs, so threads run restarts in parallel, which
+``vmap`` on CPU does not. One-substrate MM model, 64 draws, 8
+restarts x 40 steps, M4 Pro (10 performance + 4 efficiency cores)\:
+
+============= ======
+restarts      time
+============= ======
+``vmap``      5.71 s
+1 worker      5.85 s
+4 workers     1.69 s
+8 workers     0.93 s
+10 workers    0.92 s
+============= ======
+
+Efficiency cores count as cores but are slower\: in progress-doe 12
+workers on 10P+4E were slower than 8, and 24 restarts x 600 steps
+above took 41 s with 14 workers and 40 s with 10. Set ``n_workers``
+to the performance-core count when ``n_restarts`` exceeds it. The
+result is bitwise the same for every ``n_workers``. It differs from
+the earlier ``vmap`` path by roundoff, because XLA compiles a
+batched ascent differently\: 1e-14 relative on the bi-substrate
+model, 1e-8 on a flat Michaelis-Menten ridge where the restarts
+themselves agree only to 1e-8.
+
+**Returns:**
+- A ``DesignResult``.
+
+**Raises:**
+- `ValueError`: If ``spec`` misses or adds a column, has ``low > high``, or
+fixes every column, or a count is below 1.
+- `RuntimeError`: If every restart failed to solve on some ranking draw.
+Averaging over the draws that solved would let a failing design
+score higher, so such restarts are dropped rather than ranked.
+
+
+## Classes
+
+### `DesignResult` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/doe/optimize.py#L31" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+The best design found by ``optimize_design``.
+
+**Attributes:**
+- `dataset`: One ``add_initial`` arm per experiment, fixed columns at their
+value, ready to run in the lab or pass to ``evaluate_design``.
+- `report`: ``evaluate_design`` of ``dataset`` on fresh prior draws. The
+winner was selected on the ranking draws, which would bias its own
+score upwards there.
+- `restart_scores`: Hard maximin of each restart's best point on the ranking
+draws, NaN if a ranking draw failed to solve. It is the Laplace
+score the search ranks by, so it differs from ``report.maximin``,
+which is reweighted (see ``evaluate_design``). A tight spread means
+the restarts agree; a wide one means the landscape has several basins
+and the restarts were load-bearing.
+

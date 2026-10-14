@@ -7,7 +7,7 @@ sidebarTitle: measurement
 
 ## Classes
 
-### `Measurement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L32" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `Measurement` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L34" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 A class representing a measurement dataset with state concentrations over time.
@@ -24,10 +24,19 @@ Key capabilities:
 - Data augmentation with noise for simulation purposes
 - Import/export from common scientific data formats
 
+**Attributes:**
+- `id`: Unique identifier for this measurement.
+- `name`: Optional name for the measurement.
+- `description`: Optional description of the measurement.
+- `initial_conditions`: Initial concentrations keyed by state name.
+- `data`: Time series data keyed by state name.
+- `time`: Time points for the measurement data.
+- `state`: List of state names present in the data (computed field).
+
 
 **Methods:**
 
-#### `state` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L131" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `state` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L133" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 state(self) -> List[str]
@@ -36,7 +45,7 @@ state(self) -> List[str]
 Returns the list of state names present in the data.
 
 
-#### `serialize_time` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L178" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `serialize_time` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L180" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 serialize_time(self, value)
@@ -45,7 +54,7 @@ serialize_time(self, value)
 Convert JAX array time data to Python list for serialization.
 
 
-#### `serialize_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L183" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `serialize_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L185" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 serialize_data(self, value)
@@ -54,7 +63,7 @@ serialize_data(self, value)
 Convert JAX array state data to Python lists for serialization.
 
 
-#### `add_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L188" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `add_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L190" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 add_data(self, state: str, data: Union[jax.Array, np.ndarray, List[float]], initial_concentration: float) -> None
@@ -71,7 +80,7 @@ Add or update data for a state in the measurement.
 - `AssertionError`: If the provided data length doesn't match the existing time points.
 
 
-#### `add_initial` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L215" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `add_initial` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L217" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 add_initial(self, state: str, initial_concentration: float) -> None
@@ -84,7 +93,7 @@ Add or update an initial condition for a state in the measurement.
 - `initial_concentration`: The initial concentration of the state.
 
 
-#### `has_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L224" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `has_data` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L226" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 has_data(self) -> bool
@@ -96,7 +105,7 @@ Check if the measurement contains any non-empty data.
 - True if any state has data points, False otherwise.
 
 
-#### `to_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L233" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L235" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_dataframe(self) -> pd.DataFrame
@@ -111,7 +120,7 @@ and a measurementId column.
 - pd.DataFrame: DataFrame with time series data and metadata.
 
 
-#### `to_dict` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L248" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_dict` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L250" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_dict(self) -> Dict[str, Union[List[float], jax.Array, np.ndarray]]
@@ -123,7 +132,7 @@ Convert the measurement to a dictionary with time and state data.
 - Dict[str, Union\[List[float], jax.Array, np.ndarray]]: Dictionary with time and state data.
 
 
-#### `to_jsonl` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L259" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_jsonl` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L261" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_jsonl(self) -> str
@@ -137,7 +146,7 @@ Each line contains a JSON object with time and all state values for that time po
 - JSON Lines formatted string.
 
 
-#### `to_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L275" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_jax_arrays` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L277" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_jax_arrays(self, state_order: List[str], inits_to_array: bool = False) -> Tuple[jax.Array, jax.Array, Union[jax.Array, Dict[str, float]]]
@@ -162,7 +171,7 @@ Arranges the data following the provided state order for use in models.
 - `ValueError`: If any state in state_order is missing from the measurement data.
 
 
-#### `to_y0_array` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L324" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_y0_array` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L331" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_y0_array(self, state_order: List[str]) -> jax.Array
@@ -177,7 +186,7 @@ Convert initial conditions to a JAX array in the specified state order.
 - jax.Array: Initial conditions array.
 
 
-#### `from_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L337" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_dataframe` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L344" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_dataframe(cls, df: pd.DataFrame, initial_conditions: Dict[str, float], **kwargs) -> 'Measurement'
@@ -199,22 +208,30 @@ Create a Measurement object from a pandas DataFrame.
 - `ValueError`: If states in DataFrame don't match those in initial_conditions.
 
 
-#### `from_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L389" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L499" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-from_enzymeml(cls, measurement: pe.Measurement) -> 'Measurement'
+from_enzymeml(cls, measurement: pe.Measurement, global_max_len: int) -> 'Measurement'
 ```
 
-Create a Measurement object from a pyenzyme Measurement object.
+Create a Measurement from a pyenzyme Measurement object.
+
+Delegates array normalisation to ``_pad_species_arrays``, which selects
+the longest species time array as the unified time axis, validates that
+shorter species time arrays are subsets of it, position-aligns their data
+(``NaN`` at unsampled positions), and pads all arrays to ``global_max_len``.
 
 **Args:**
 - `measurement`: PyEnzyme measurement object.
+- `global_max_len`: Common length for all output arrays; determined
+by ``Dataset.from_enzymeml()`` across the entire document.
 
 **Returns:**
-- New Measurement object with data from the PyEnzyme measurement.
+- New Measurement with a single unified time axis and
+- NaN-padded data arrays.
 
 
-#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L481" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L605" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot(self, show: bool = True, ax = None, model_data: Optional[Measurement] = None, xlim: Optional[Tuple[float, float | None]] = (0, None), _lower_95: Optional[Measurement] = None, _upper_95: Optional[Measurement] = None, _lower_50: Optional[Measurement] = None, _upper_50: Optional[Measurement] = None, **kwargs) -> None
@@ -234,19 +251,30 @@ Plot the measurement data with optional model fit comparison.
 - `**kwargs`: Additional arguments to pass to plot functions.
 
 
-#### `augment` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L618" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `augment` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/measurement.py#L743" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-augment(self, sigma: float, seed: int, multiplicative: bool = False) -> 'Measurement'
+augment(self, sigma: float | None = None, seed: int = 42, multiplicative: bool = False, noise: NoiseModel | None = None) -> 'Measurement'
 ```
 
 Create a new Measurement with noise-augmented data.
 
+Every species gets its own independent Gaussian noise; the same ``seed``
+reproduces it. Give either ``sigma`` (with ``multiplicative``) or ``noise``.
+
 **Args:**
-- `sigma`: Standard deviation of the Gaussian noise.
+- `sigma`: Noise standard deviation. Additive\: ``y + N(0, sigma)``, in
+data units, the same as ``noise=Homoskedastic(sigma)``. Multiplicative\:
+``y * (1 + N(0, sigma))``, relative, ``Proportional(cv=sigma)`` without a floor.
 - `seed`: Random seed for reproducibility.
-- `multiplicative`: If True, noise is multiplicative rather than additive.
+- `multiplicative`: If True, ``sigma`` is relative rather than absolute.
+- `noise`: Noise model with fixed values\: ``y + N(0, noise.scale(y))``.
+Pass the same object to ``optimize`` or ``HMC.run`` to fit the noise you generated.
 
 **Returns:**
 - New Measurement object with noise-augmented data.
+
+**Raises:**
+- `ValueError`: If both ``sigma`` and ``noise`` (or neither) are given, or
+``noise`` holds priors.
 

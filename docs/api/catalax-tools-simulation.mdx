@@ -15,6 +15,13 @@ Input configuration for simulation setup.
 This class encapsulates all the necessary components for setting up a simulation,
 including the differential equations, reactions, and variable definitions.
 
+**Attributes:**
+- `odes`: List of ODE objects defining differential equations
+- `reactions`: List of reaction objects defining reaction kinetics
+- `states`: List of state variable names in the system
+- `parameters`: List of parameter names
+- `constants`: List of constant names
+
 
 **Methods:**
 
@@ -65,4 +72,16 @@ The simulation supports three types of systems:
 - Pure ODE systems (direct differential equations)
 - Pure reaction systems (reaction kinetics with stoichiometry)
 - Mixed systems (combination of ODEs and reactions)
+
+**Attributes:**
+- `sim_input`: Configuration containing ODEs, reactions, and variable definitions
+- `config`: Simulation configuration including solver settings and tolerances
+- `sensitivity`: Optional sensitivity analysis configuration for computing Jacobians
+- `sensitivity_method`: How sensitivities are computed. "reverse" differentiates
+through the solver with ``jax.jacobian`` and returns only the Jacobian.
+"forward" integrates ``S = dy/dparameters`` alongside the states
+(``dS/dt = J_y S + df/dparameters``, ``S(0) = 0``) and returns
+``(ys, S)``; the result stays differentiable with respect to the
+initial conditions, constants and time points. Only
+``InAxes.PARAMETERS`` is supported in forward mode.
 

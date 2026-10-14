@@ -16,6 +16,9 @@ This class manages multiple penalty functions and applies them collectively to a
 Penalties are used to enforce constraints or encourage certain behaviors in the model
 parameters during optimization.
 
+**Attributes:**
+- `penalties`: List of Penalty objects to apply to the model
+
 
 **Methods:**
 
@@ -106,6 +109,12 @@ A single penalty function with associated parameters.
 This class wraps a penalty function along with its strength parameter (alpha)
 and any additional keyword arguments needed for the function. It provides
 validation to ensure the penalty function has the correct signature.
+
+**Attributes:**
+- `name`: The name of the penalty for identification
+- `fun`: The penalty function to apply (must accept 'model' and 'alpha' parameters)
+- `alpha`: Strength coefficient for the penalty
+- `kwargs`: Additional keyword arguments for the penalty function
 
 
 **Methods:**

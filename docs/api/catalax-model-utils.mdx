@@ -5,48 +5,87 @@ sidebarTitle: utils
 
 # `catalax.model.utils`
 
+
+Utility functions and classes for the catalax model module.
+
 ## Functions
 
-### `odeprint` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L47" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `odeprint` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L79" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 odeprint(y, expr)
 ```
 
 
-Displays an ODE with a left-hand side derivative
+Display an ODE with a left-hand side derivative.
+
+**Args:**
+- `y`: The dependent variable (state).
+- `expr`: The right-hand side expression of the ODE.
 
 
-### `eqprint` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L59" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `eqprint` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L96" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 eqprint(y, expr)
 ```
 
 
-Displays an ODE with a left-hand side derivative
+Display an equation in a formatted way.
+
+**Args:**
+- `y`: The left-hand side variable.
+- `expr`: The right-hand side expression.
 
 
-### `parameter_exists` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L71" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `parameter_exists` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L113" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 parameter_exists(name: str, parameters: Dict[str, Parameter]) -> bool
 ```
 
 
-Checks whether a parameter is already present in a model
+Check whether a parameter is already present in a model.
+
+**Args:**
+- `name`: The name of the parameter to check for.
+- `parameters`: Dictionary of existing parameters.
+
+**Returns:**
+- True if parameter exists, False otherwise.
 
 
-### `check_symbol` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L77" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `check_symbol` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L127" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 check_symbol(symbol: str) -> None
 ```
 
 
-Checks whether the given symbol is a valid symbol
+Check whether the given symbol is a valid symbol according to catalax naming rules.
+
+Valid symbols must follow these rules:
+1. The first character must be a letter
+2. The remaining characters can be letters and numbers
+3. The symbol cannot end with an underscore
+4. The symbol can contain at most one underscore followed by letters and numbers
+
+Valid examples: k1, k_12, k_max, k_max1
+
+**Args:**
+- `symbol`: The symbol string to validate.
+
+**Raises:**
+- `ValueError`: If the symbol does not meet the validation criteria.
 
 
 ## Classes
 
-### `PrettyDict` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L12" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `PrettyDict` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/model/utils.py#L24" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+A dictionary that displays its contents as a formatted pandas DataFrame.
+
+This class extends DottedDict to provide a more readable representation
+of model components when displayed in Jupyter notebooks or printed to console.
+

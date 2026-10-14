@@ -1,0 +1,288 @@
+---
+title: enzymatic
+sidebarTitle: enzymatic
+---
+
+# `catalax.laws.enzymatic`
+
+
+
+Enzymatic Rate Law kinetic law functions.
+
+This module contains kinetic law functions for the "Enzymatic Rate Law" category.
+Functions are auto-generated from SBO kinetic law definitions.
+
+
+## Functions
+
+### `michaelis_menten` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L14" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+michaelis_menten(e_t: Annotated[str, 'Concentration of enzyme'], s: Annotated[str, 'Concentration of substrate'], k_cat: Annotated[str, 'Catalytic rate constant'] = 'k_cat', K_m: Annotated[str, 'Michaelis constant in quasi-steady state situation'] = 'K_m') -> Expr
+```
+
+
+First general rate equation for reactions involving enzymes, it was presented in "Victor Henri. Lois Generales de l'Action des Diastases. Paris, Hermann, 1903.". The reaction is assumed to be made of a reversible of the binding of the substrate to the enzyme, followed by the breakdown of the complex generating the product. Ten years after Henri, Michaelis and Menten presented a variant of his equation, based on the hypothesis that the dissociation rate of the substrate was much larger than the rate of the product generation. Leonor Michaelis, Maud Menten (1913). Die Kinetik der Invertinwirkung, Biochem. Z. 49:333-369.
+
+**Args:**
+- `e_t`: Concentration of enzyme
+- `s`: Concentration of substrate
+- `k_cat`: Catalytic rate constant
+- `K_m`: Michaelis constant in quasi-steady state situation
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `briggs_haldane` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L45" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+briggs_haldane(e_t: Annotated[str, 'Concentration of enzyme'], s: Annotated[str, 'Concentration of substrate'], k_cat: Annotated[str, 'Catalytic rate constant'] = 'k_cat', K_m: Annotated[str, 'Michaelis constant in quasi-steady state situation'] = 'K_m') -> Expr
+```
+
+
+The Briggs-Haldane rate law is a general rate equation that does not require the restriction of equilibrium of Henri-Michaelis-Menten or irreversible reactions of Van Slyke, but instead make the hypothesis that the complex enzyme-substrate is in quasi-steady-state. Although of the same form than the Henri-Michaelis-Menten equation, it is semantically different since Km now represents a pseudo-equilibrium constant, and is equal to the ratio between the rate of consumption of the complex (sum of dissociation of substrate and generation of product) and the association rate of the enzyme and the substrate.
+
+**Args:**
+- `e_t`: Concentration of enzyme
+- `s`: Concentration of substrate
+- `k_cat`: Catalytic rate constant
+- `K_m`: Michaelis constant in quasi-steady state situation
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `normalised_enzymatic_for_unireactant_enzymes` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L76" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+normalised_enzymatic_for_unireactant_enzymes(s: Annotated[str, 'Concentration of substrate'], k_cat: Annotated[str, 'Catalytic rate constant'] = 'k_cat', K_s: Annotated[str, 'Michaelis constant'] = 'K_s') -> Expr
+```
+
+
+Kinetics of enzymes that react only with one substance, their substrate. The total enzyme concentration is considered to be equal to 1, therefore the maximal velocity equals the catalytic constant.
+
+**Args:**
+- `s`: Concentration of substrate
+- `k_cat`: Catalytic rate constant
+- `K_s`: Michaelis constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `irreversible_non_modulated_non_interacting_bireactant_enzymes` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L104" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+irreversible_non_modulated_non_interacting_bireactant_enzymes(e_t: Annotated[str, 'Concentration of enzyme'], s_a: Annotated[str, 'Concentration of substrate'], s_b: Annotated[str, 'Concentration of substrate'], k_p: Annotated[str, 'Catalytic rate constant'] = 'k_p', K_1: Annotated[str, 'Michaelis constant'] = 'K_1', K_2: Annotated[str, 'Michaelis constant'] = 'K_2') -> Expr
+```
+
+
+Kinetics of enzymes that react with two substances, their substrates, that bind independently. The enzymes do not catalyse the reactions in both directions.
+
+**Args:**
+- `e_t`: Concentration of enzyme
+- `s_a`: Concentration of substrate
+- `s_b`: Concentration of substrate
+- `k_p`: Catalytic rate constant
+- `K_1`: Michaelis constant
+- `K_2`: Michaelis constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `irreversible_non_modulated_non_interacting_trireactant_enzymes` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L144" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+irreversible_non_modulated_non_interacting_trireactant_enzymes(e_t: Annotated[str, 'Concentration of enzyme'], s_a: Annotated[str, 'Concentration of substrate'], s_b: Annotated[str, 'Concentration of substrate'], s_3: Annotated[str, 'Concentration of substrate'], k_p: Annotated[str, 'Catalytic rate constant'] = 'k_p', K_1: Annotated[str, 'Michaelis constant'] = 'K_1', K_2: Annotated[str, 'Michaelis constant'] = 'K_2', K_3: Annotated[str, 'Michaelis constant'] = 'K_3') -> Expr
+```
+
+
+Kinetics of enzymes that react with three substances, their substrates, that bind independently. The enzymes do not catalyse the reactions in both directions.
+
+**Args:**
+- `e_t`: Concentration of enzyme
+- `s_a`: Concentration of substrate
+- `s_b`: Concentration of substrate
+- `s_3`: Concentration of substrate
+- `k_p`: Catalytic rate constant
+- `K_1`: Michaelis constant
+- `K_2`: Michaelis constant
+- `K_3`: Michaelis constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `reversible_iso_uni_uni` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L190" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+reversible_iso_uni_uni(s: Annotated[str, 'Concentration of substrate'], p: Annotated[str, 'Concentration of product'], K_ms: Annotated[str, 'Michaelis constant for substrate'] = 'K_ms', K_mp: Annotated[str, 'Michaelis constant for product'] = 'K_mp', K_i: Annotated[str, 'Isoinhibition constant'] = 'K_i', V_f: Annotated[str, 'Forward maximal velocity'] = 'V_f', K_eq: Annotated[str, 'Equilibrium constant'] = 'K_eq') -> Expr
+```
+
+
+Enzyme catalysed reaction involving one substrate and one product. Unlike the reversible uni-uni mechanism (SBO:0000326), the mechanism assumes an enzyme intermediate. Therefore, the free enzyme generated after the release of product from enzyme-product complex is not the same form as that which bind the substrate to form enzyme-substrate complex. Some permeases are thought to follow this mechanism, such that isomerization in the membrane may be accomplished through re-orientation in the membrane.
+
+**Args:**
+- `s`: Concentration of substrate
+- `p`: Concentration of product
+- `K_ms`: Michaelis constant for substrate
+- `K_mp`: Michaelis constant for product
+- `K_i`: Isoinhibition constant
+- `V_f`: Forward maximal velocity
+- `K_eq`: Equilibrium constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `unmodulated_reversible_hill_type` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L232" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+unmodulated_reversible_hill_type(s: Annotated[str, 'Concentration of substrate'], p: Annotated[str, 'Concentration of product'], K_eq: Annotated[str, 'Equilibrium constant'] = 'K_eq', V_f: Annotated[str, 'Forward maximal velocity'] = 'V_f', K_s: Annotated[str, 'Pseudo-dissociation constant for substrate'] = 'K_s', K_p: Annotated[str, 'Pseudo-dissociation constant for product'] = 'K_p') -> Expr
+```
+
+
+Reversible equivalent of Hill kinetics, where substrate and product bind co-operatively to the enzyme. A Hill coefficient (h) of greater than 1 indicates positive co-operativity between substrate and product, while h values below 1 indicate negative co-operativity.
+
+**Args:**
+- `s`: Concentration of substrate
+- `p`: Concentration of product
+- `K_eq`: Equilibrium constant
+- `V_f`: Forward maximal velocity
+- `K_s`: Pseudo-dissociation constant for substrate
+- `K_p`: Pseudo-dissociation constant for product
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `irreversible_michaelis_menten_for_two_substrates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L273" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+irreversible_michaelis_menten_for_two_substrates(a: Annotated[str, 'Concentration of substrate'], b: Annotated[str, 'Concentration of substrate'], e_t: Annotated[str, 'Concentration of enzyme'], K_mA: Annotated[str, 'Michaelis constant for substrate'] = 'K_mA', K_mB: Annotated[str, 'Michaelis constant for substrate'] = 'K_mB', K_iA: Annotated[str, 'Inhibitory constant'] = 'K_iA', k_cat: Annotated[str, 'Product catalytic rate constant'] = 'k_cat') -> Expr
+```
+
+
+Enzymatic rate law for an irreversible reaction involving two substrates and one product.
+
+**Args:**
+- `a`: Concentration of substrate
+- `b`: Concentration of substrate
+- `e_t`: Concentration of enzyme
+- `K_mA`: Michaelis constant for substrate
+- `K_mB`: Michaelis constant for substrate
+- `K_iA`: Inhibitory constant
+- `k_cat`: Product catalytic rate constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `ordered_bi_bi_mechanism` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L313" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ordered_bi_bi_mechanism(s_a: Annotated[str, 'Concentration of substrate'], s_b: Annotated[str, 'Concentration of substrate'], p_p: Annotated[str, 'Concentration of product'], p_q: Annotated[str, 'Concentration of product'], K_eq: Annotated[str, 'Equilibrium constant'] = 'K_eq', V_f: Annotated[str, 'Forward maximal velocity'] = 'V_f', V_r: Annotated[str, 'Reverse maximal velocity'] = 'V_r', K_ma: Annotated[str, 'Michaelis constant for substrate'] = 'K_ma', K_mb: Annotated[str, 'Michaelis constant for substrate'] = 'K_mb', K_mp: Annotated[str, 'Michaelis constant for product'] = 'K_mp', K_mq: Annotated[str, 'Michaelis constant for product'] = 'K_mq', K_ia: Annotated[str, 'Inhibitory constant'] = 'K_ia', K_ib: Annotated[str, 'Inhibitory constant'] = 'K_ib', K_ip: Annotated[str, 'Inhibitory constant'] = 'K_ip') -> Expr
+```
+
+
+Enzymatic rate law for a reaction involving two substrates and two products. The products P and then Q are released strictly in order, while the substrates are bound strictly in the order A and then B.
+
+**Args:**
+- `s_a`: Concentration of substrate
+- `s_b`: Concentration of substrate
+- `p_p`: Concentration of product
+- `p_q`: Concentration of product
+- `K_eq`: Equilibrium constant
+- `V_f`: Forward maximal velocity
+- `V_r`: Reverse maximal velocity
+- `K_ma`: Michaelis constant for substrate
+- `K_mb`: Michaelis constant for substrate
+- `K_mp`: Michaelis constant for product
+- `K_mq`: Michaelis constant for product
+- `K_ia`: Inhibitory constant
+- `K_ib`: Inhibitory constant
+- `K_ip`: Inhibitory constant
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `ordered_bi_uni_mechanism` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L377" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ordered_bi_uni_mechanism(s_a: Annotated[str, 'Concentration of substrate'], s_b: Annotated[str, 'Concentration of substrate'], p: Annotated[str, 'Concentration of product'], K_ma: Annotated[str, 'Michaelis constant for substrate'] = 'K_ma', K_mb: Annotated[str, 'Michaelis constant for substrate'] = 'K_mb', K_mp: Annotated[str, 'Michaelis constant for product'] = 'K_mp', K_ia: Annotated[str, 'Inhibitory constant'] = 'K_ia', K_eq: Annotated[str, 'Equilibrium constant'] = 'K_eq', V_f: Annotated[str, 'Forward maximal velocity'] = 'V_f', V_r: Annotated[str, 'Reverse maximal velocity'] = 'V_r') -> Expr
+```
+
+
+Enzymatic rate for a reaction involving two substrates and one product. The substrates A and then B are bound strictly in order.
+
+**Args:**
+- `s_a`: Concentration of substrate
+- `s_b`: Concentration of substrate
+- `p`: Concentration of product
+- `K_ma`: Michaelis constant for substrate
+- `K_mb`: Michaelis constant for substrate
+- `K_mp`: Michaelis constant for product
+- `K_ia`: Inhibitory constant
+- `K_eq`: Equilibrium constant
+- `V_f`: Forward maximal velocity
+- `V_r`: Reverse maximal velocity
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `ordered_uni_bi_mechanism` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L429" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ordered_uni_bi_mechanism(s: Annotated[str, 'Concentration of substrate'], p_p: Annotated[str, 'Concentration of product'], p_q: Annotated[str, 'Concentration of product'], K_ms: Annotated[str, 'Michaelis constant for substrate'] = 'K_ms', K_mq: Annotated[str, 'Michaelis constant for product'] = 'K_mq', K_mp: Annotated[str, 'Michaelis constant for product'] = 'K_mp', K_ip: Annotated[str, 'Inhibitory constant'] = 'K_ip', K_eq: Annotated[str, 'Equilibrium constant'] = 'K_eq', V_f: Annotated[str, 'Forward maximal velocity'] = 'V_f', V_r: Annotated[str, 'Reverse maximal velocity'] = 'V_r') -> Expr
+```
+
+
+Enzymatic rate law for a reaction with one substrate and two products. The products P and then Q are released in the strict order P and then Q.
+
+**Args:**
+- `s`: Concentration of substrate
+- `p_p`: Concentration of product
+- `p_q`: Concentration of product
+- `K_ms`: Michaelis constant for substrate
+- `K_mq`: Michaelis constant for product
+- `K_mp`: Michaelis constant for product
+- `K_ip`: Inhibitory constant
+- `K_eq`: Equilibrium constant
+- `V_f`: Forward maximal velocity
+- `V_r`: Reverse maximal velocity
+
+**Returns:**
+- The kinetic law equation as a string
+
+
+### `ping_pong_bi_bi_mechanism` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/laws/enzymatic.py#L481" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+ping_pong_bi_bi_mechanism(s_a: Annotated[str, 'Concentration of substrate'], s_b: Annotated[str, 'Concentration of substrate'], p_p: Annotated[str, 'Concentration of product'], p_q: Annotated[str, 'Concentration of product'], K_eq: Annotated[str, 'Equilibrium constant'] = 'K_eq', V_f: Annotated[str, 'Forward maximal velocity'] = 'V_f', V_r: Annotated[str, 'Reverse maximal velocity'] = 'V_r', K_ma: Annotated[str, 'Michaelis constant for substrate'] = 'K_ma', K_mb: Annotated[str, 'Michaelis constant for substrate'] = 'K_mb', K_mp: Annotated[str, 'Michaelis constant for substrate'] = 'K_mp', K_mq: Annotated[str, 'Michaelis constant for substrate'] = 'K_mq', K_ia: Annotated[str, 'Inhibitory constant'] = 'K_ia', K_iq: Annotated[str, 'Inhibitory constant'] = 'K_iq') -> Expr
+```
+
+
+Enzymatic rate law for a reaction involving two substrates and two products. The first product (P) is released after the first substrate (A) has been bound. The second product (Q) is released after the second substrate (B) has been bound.
+
+**Args:**
+- `s_a`: Concentration of substrate
+- `s_b`: Concentration of substrate
+- `p_p`: Concentration of product
+- `p_q`: Concentration of product
+- `K_eq`: Equilibrium constant
+- `V_f`: Forward maximal velocity
+- `V_r`: Reverse maximal velocity
+- `K_ma`: Michaelis constant for substrate
+- `K_mb`: Michaelis constant for substrate
+- `K_mp`: Michaelis constant for substrate
+- `K_mq`: Michaelis constant for substrate
+- `K_ia`: Inhibitory constant
+- `K_iq`: Inhibitory constant
+
+**Returns:**
+- The kinetic law equation as a string
+

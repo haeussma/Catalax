@@ -7,7 +7,7 @@ sidebarTitle: results
 
 ## Classes
 
-### `HMCResults` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L29" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `HMCResults` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L28" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Results container for HMC sampling with integrated visualization methods.
@@ -21,10 +21,15 @@ The class integrates with ArviZ for advanced diagnostics and provides
 methods for generating various plots including corner plots, trace plots,
 posterior distributions, and credibility intervals.
 
+**Attributes:**
+- `mcmc`: The MCMC object containing posterior samples
+- `bayesian_model`: The Bayesian model used for sampling
+- `model`: The original mechanistic model that was fit
+
 
 **Methods:**
 
-#### `get_fitted_model` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L65" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_fitted_model` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L64" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_fitted_model(self, hdi_prob: float = 0.95, set_bounds: bool = False) -> 'Model'
@@ -47,7 +52,7 @@ parameter bounds will be updated to reflect posterior uncertainty.
 The returned model can be used for predictions with fitted parameters.
 
 
-#### `get_samples` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L92" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_samples` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L91" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_samples(self) -> Dict[str, Array]
@@ -65,7 +70,7 @@ posterior samples. Each array has shape (num_samples, ...) where
 the parameter dimensions depend on the parameter structure.
 
 
-#### `print_summary` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L106" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `print_summary` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L105" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 print_summary(self)
@@ -82,7 +87,7 @@ Displays a tabular summary of the MCMC results including:
 This provides a quick overview of sampling quality and parameter estimates.
 
 
-#### `render_model` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L119" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `render_model` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L118" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 render_model(self, path: str, render_distributions: bool = False)
@@ -106,36 +111,36 @@ and likelihood distributions.
 - based on the rendering backend used.
 
 
-#### `plot_corner` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L148" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_corner` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L147" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-plot_corner(self, quantiles: Tuple[float, float, float] = (0.16, 0.5, 0.84), figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None)
+plot_corner(self, hdi_prob: float = 0.94, figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None)
 ```
 
-Plot corner plot of parameter correlations and marginal distributions.
+Plot a pair plot of the posterior parameters.
 
-Creates a matrix plot showing pairwise parameter correlations in the
-lower triangle, marginal posterior distributions on the diagonal, and
-optionally scatter plots in the upper triangle. This is essential for
-understanding parameter dependencies and posterior structure.
+Wraps :func:`arviz.plot_pair` with KDE marginals on the diagonal that
+show the posterior median and HDI interval, scatter joint plots on the
+lower triangle, and divergent transitions overlaid on the scatter
+plots.
 
 **Args:**
-- `quantiles`: Three quantiles to display in marginal distributions,
-typically representing lower bound, median, and upper bound.
-Default (0.16, 0.5, 0.84) corresponds to 68% credible intervals.
+- `hdi_prob`: Probability mass of the HDI marked on each marginal.
+Default is 0.94.
 - `figsize`: Figure size as (width, height) in inches. If None, uses default size.
-- `backend`: Backend to use ('matplotlib' or 'bokeh'). If None, uses default.
+- `backend`: Backend to use ('matplotlib', 'bokeh', or 'plotly'). If None,
+uses arviz default.
 - `show`: Whether to display the plot immediately using plt.show().
 If False, the figure is returned without displaying.
 - `path`: Optional file path to save the plot. If provided, the figure
 will be saved to this location.
 
 **Returns:**
-- matplotlib.figure.Figure or bokeh plot: The corner plot figure, or None if show=True.
-Can be used for further customization or saving.
+- matplotlib.figure.Figure or backend-specific figure: The pair plot
+- figure, or None if show=True.
 
 
-#### `plot_posterior` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L188" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_posterior` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L187" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_posterior(self, figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None, **kwargs)
@@ -154,17 +159,16 @@ and can help identify multimodal distributions or convergence issues.
 If False, the figure is returned without displaying.
 - `path`: Optional file path to save the plot. If provided, the figure
 will be saved to this location.
-- `**kwargs`: Additional keyword arguments passed to arviz.plot_posterior.
-Common options include 'hdi_prob' for credible interval probability,
-'point_estimate' for central tendency measure, and 'ref_val' for
-reference values.
+- `**kwargs`: Additional keyword arguments passed to arviz.plot_dist
+(the ArviZ v1 replacement for plot_posterior). Common options
+include 'kind' ("kde", "hist", or "ecdf") and 'point_estimate'.
 
 **Returns:**
 - matplotlib.figure.Figure or bokeh plot: The posterior plot figure, or None if show=True.
 Contains subplots for each parameter's posterior distribution.
 
 
-#### `plot_credibility_interval` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L228" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_credibility_interval` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L226" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_credibility_interval(self, initial_condition: Dict[str, float], time: Array, dt0: float = 0.1, figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None)
@@ -198,7 +202,7 @@ will be saved to this location.
 or None if show=True. Shows model trajectories with uncertainty bands.
 
 
-#### `plot_trace` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L277" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_trace` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L275" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_trace(self, figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None, **kwargs)
@@ -227,7 +231,7 @@ Common options include 'var_names' to select specific parameters,
 Contains time series plots for each parameter across all chains.
 
 
-#### `plot_forest` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L315" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_forest` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L313" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_forest(self, figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None, **kwargs)
@@ -247,19 +251,18 @@ If False, the figure is returned without displaying.
 - `path`: Optional file path to save the plot. If provided, the figure
 will be saved to this location.
 - `**kwargs`: Additional keyword arguments passed to arviz.plot_forest.
-Common options include 'hdi_prob' for credible interval probability,
-'combined' for pooling chains, and 'ess' for showing effective
-sample size.
+Common options include 'ci_probs' (list of credible interval
+widths, e.g. [0.94]) and 'combined' for pooling chains.
 
 **Returns:**
 - matplotlib.figure.Figure or bokeh plot: The forest plot figure, or None if show=True.
 Shows horizontal credible intervals for each parameter.
 
 
-#### `summary` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L357" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `summary` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L354" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-summary(self, hdi_prob: float = 0.95) -> Union[pd.DataFrame, xarray.Dataset]
+summary(self, hdi_prob: float = 0.95) -> pd.DataFrame
 ```
 
 Generate comprehensive summary statistics for posterior samples.
@@ -275,13 +278,12 @@ Determines the width of credible intervals in the summary.
 Default 0.95 corresponds to 95% credible intervals.
 
 **Returns:**
-- Union\[pd.DataFrame, xarray.Dataset]: Summary statistics table
-containing means, standard deviations, credible intervals,
-effective sample sizes, and R-hat diagnostics for each parameter.
-Format depends on the underlying implementation.
+- pd.DataFrame: Summary statistics table containing means, standard
+deviations, HDI credible intervals, effective sample sizes,
+and R-hat diagnostics for each parameter.
 
 
-#### `plot_mcse` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L380" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_mcse` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L376" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_mcse(self, figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None, **kwargs)
@@ -308,7 +310,7 @@ maintained for API consistency).
 Shows Monte Carlo standard error for each parameter.
 
 
-#### `plot_ess` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L416" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_ess` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L412" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_ess(self, figsize: Optional[Tuple[float, float]] = None, backend: Optional[str] = None, show: bool = False, path: Optional[str] = None, **kwargs)
@@ -335,26 +337,25 @@ maintained for API consistency).
 Shows effective sample size for each parameter.
 
 
-#### `to_arviz` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L453" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_arviz` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L449" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_arviz(self)
 ```
 
-Convert MCMC results to ArviZ InferenceData format.
+Convert MCMC results to ArviZ's DataTree format.
 
-Transforms the numpyro MCMC results into ArviZ's standardized format,
-enabling access to advanced diagnostic tools, visualization methods,
-and interoperability with other Bayesian analysis packages.
+Transforms the numpyro MCMC results into ArviZ's standardized format
+(an xarray.DataTree as of ArviZ v1), enabling access to advanced
+diagnostic tools, visualization methods, and interoperability with
+other Bayesian analysis packages.
 
 **Returns:**
-- arviz.InferenceData: MCMC results in ArviZ format containing
-posterior samples, sample statistics, and metadata. This format
-provides access to comprehensive Bayesian analysis tools and
-standardized visualization methods.
+- xarray.DataTree: MCMC results in ArviZ format containing
+posterior samples, sample statistics, and metadata.
 
 
-#### `to_netcdf` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L468" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_netcdf` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L463" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_netcdf(self, path: str)
@@ -377,7 +378,7 @@ diagnostics, and metadata in a standardized format.
 be loaded using arviz.from_netcdf() or similar tools.
 
 
-#### `create_plots_widget` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L552" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `create_plots_widget` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/results.py#L547" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 create_plots_widget(self, initial_condition: Optional[Dict[str, float]] = None, time: Optional[Array] = None, dt0: float = 0.1, figsize: Optional[Tuple[float, float]] = (10, 6), backend: Optional[str] = None, tabs_to_include: Optional[List[str]] = None) -> Optional[widgets.Widget]

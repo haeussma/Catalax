@@ -7,10 +7,10 @@ sidebarTitle: mcmc
 
 ## Functions
 
-### `run_mcmc` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L406" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `run_mcmc` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L528" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-run_mcmc(model: 'Model', dataset: Dataset, yerrs: Union[float, Array], config: MCMCConfig, surrogate: Optional[Surrogate] = None, pre_model: Optional[PreModel] = None, post_model: Optional[PostModel] = None) -> HMCResults
+run_mcmc(model: 'Model', dataset: Dataset, yerrs: Optional[Union[float, Array]], config: MCMCConfig, surrogate: Optional[Surrogate] = None, pre_model: Optional[PreModel] = None, post_model: Optional[PostModel] = None, noise: Optional[Union[NoiseModel, Array, float]] = None) -> HMCResults
 ```
 
 
@@ -24,11 +24,12 @@ distribution of parameters.
 **Args:**
 - `model`: Model to fit
 - `dataset`: Dataset containing observations to fit against
-- `yerrs`: Standard deviation of observed data
+- `yerrs`: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Give either yerrs or noise, not both.
 - `config`: MCMC configuration parameters
 - `surrogate`: Optional surrogate model for rate prediction
 - `pre_model`: Optional function to transform inputs and parameters before simulation
 - `post_model`: Optional function to transform outputs after simulation
+- `noise`: Observation noise as standard deviations (see catalax.noise)\: fixed per-point SDs (array or float) or a noise model evaluated on the prediction. Replaces the sampled sigma.
 
 **Returns:**
 - Tuple of (MCMC object with results, Bayesian model function)
@@ -41,7 +42,7 @@ distribution of parameters.
 
 ## Classes
 
-### `MCMCConfig` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L39" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `MCMCConfig` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L44" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Configuration parameters for MCMC simulation.
@@ -54,40 +55,52 @@ Configuration parameters for MCMC simulation.
 - `thinning`: Factor by which to thin samples (default\: 1)
 - `max_tree_depth`: Maximum depth of NUTS binary tree (default\: 10)
 - `dt0`: Time step resolution for simulation (default\: 0.1)
-- `chain_method`: Chain execution method - "sequential", "parallel", or "vectorized" (default\: "parallel")
-- `num_chains`: Number of Markov chains to run (default\: 4)
+- `chain_method`: Chain execution method - "sequential", "parallel", or "vectorized"
+(default\: "parallel", one chain per CPU device; ``import catalax`` sets one
+device per core, and with too few devices numpyro runs them in sequence)
+- `num_chains`: Number of Markov chains to run (default\: 4, enough to compare
+chains for convergence, R-hat)
 - `seed`: Random seed for reproducibility (default\: 420)
 - `verbose`: Verbosity level; 0 for silent, 1 for progress (default\: 1)
-- `max_steps`: Maximum number of integration steps (default\: 64^4)
+- `max_steps`: Maximum solver steps per solve (default\: 4096, SimulationConfig's default,
+which every fit effectively used while the value was mis-routed into t1). Large
+values are compiled into the adjoint's checkpoint schedule and blow up compile time.
+- `rtol, atol`: ODE solver tolerances (default 1e-5). Tighten them when the fitted
+noise scale gets close to the solver error\: the likelihood then becomes
+rough, NUTS's energy error is dominated by solver noise, and dual averaging
+drives the step size towards zero (tree depth pinned at the maximum).
+HPLC peak areas need this\: integration noise is additive and can push a
+reading below zero, while injection volume and preparation scale with the
+amount measured.
 
 
 **Methods:**
 
-#### `to_simulation_config` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L71" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `to_simulation_config` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L90" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 to_simulation_config(self) -> SimulationConfig
 ```
 
-### `Modes` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L80" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `Modes` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L107" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Modes of the model.
 
 
-### `ModelSetup` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L88" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `ModelSetup` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L115" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Container for model setup results.
 
 
-### `DataPreparation` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L95" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `DataPreparation` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L122" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Container for prepared MCMC data.
 
 
-### `HMC` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L107" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `HMC` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L134" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Hamiltonian Monte Carlo sampler wrapper.
@@ -98,10 +111,10 @@ with integrated configuration and result handling.
 
 **Methods:**
 
-#### `run` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L164" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `run` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L196" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
-run(self, model: 'Model', dataset: Dataset, yerrs: Union[float, Array], surrogate: Optional[Surrogate] = None, pre_model: Optional[PreModel] = None, post_model: Optional[PostModel] = None) -> HMCResults
+run(self, model: 'Model', dataset: Dataset, yerrs: Optional[Union[float, Array]] = None, surrogate: Optional[Surrogate] = None, pre_model: Optional[PreModel] = None, post_model: Optional[PostModel] = None, abort_on_error: bool = False, noise: Optional[Union[NoiseModel, Array, float]] = None) -> HMCResults
 ```
 
 Run MCMC simulation to infer posterior distribution of parameters.
@@ -114,11 +127,12 @@ distribution of parameters.
 **Args:**
 - `model`: Model to fit
 - `dataset`: Dataset containing observations to fit against
-- `yerrs`: Standard deviation of observed data
+- `yerrs`: Standard deviation of observed data; sets the scale of the sampled sigma's prior. Give either yerrs or noise, not both.
 - `surrogate`: Optional surrogate model for rate prediction
 - `pre_model`: Optional function to transform inputs and parameters before simulation
 - `post_model`: Optional function to transform outputs after simulation
 - `solver`: Solver to use for simulation
+- `noise`: Observation noise as standard deviations (see catalax.noise)\: fixed per-point SDs (array or float) or a noise model evaluated on the prediction. Replaces the sampled sigma.
 
 Returns:
     Tuple of (MCMC object with results, Bayesian model function)
@@ -129,7 +143,7 @@ Returns:
 - `ValueError`: If pre_model or post_model signatures don't match Protocol requirements
 
 
-#### `from_config` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L249" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `from_config` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L335" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 from_config(cls, config: MCMCConfig) -> HMC
@@ -141,7 +155,7 @@ Create HMC instance from configuration.
 - `config`: MCMC configuration parameters
 
 
-### `BayesianModel` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L272" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+### `BayesianModel` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/mcmc/mcmc.py#L360" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 
 Bayesian model for MCMC parameter inference.

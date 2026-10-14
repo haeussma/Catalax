@@ -1,0 +1,38 @@
+---
+title: enzymeml
+sidebarTitle: enzymeml
+---
+
+# `catalax.dataset.enzymeml`
+
+
+EnzymeML integration for Catalax datasets.
+
+This module provides functionality to convert Catalax datasets to EnzymeML format,
+enabling interoperability with the EnzymeML ecosystem for enzyme kinetics modeling.
+
+
+## Functions
+
+### `to_enzymeml` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/dataset/enzymeml.py#L16" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+to_enzymeml(dataset: Dataset, enzmldoc: Optional[pe.EnzymeMLDocument] = None) -> pe.EnzymeMLDocument
+```
+
+
+Convert a Catalax dataset to an EnzymeML document.
+
+This function transforms a Catalax Dataset into an EnzymeML document format,
+preserving all measurement data, time points, and initial conditions. If an
+existing EnzymeML document is provided, the dataset measurements are appended
+to it.
+
+**Args:**
+- `dataset`: The Catalax dataset to convert
+- `enzmldoc`: Optional existing EnzymeML document to append to. If None,
+     a new document is created with the dataset name
+
+**Returns:**
+- EnzymeML document containing the converted dataset measurements
+

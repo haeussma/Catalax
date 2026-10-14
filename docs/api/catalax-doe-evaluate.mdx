@@ -1,0 +1,129 @@
+---
+title: evaluate
+sidebarTitle: evaluate
+---
+
+# `catalax.doe.evaluate`
+
+
+Expected posterior shrinkage of a design under the priors or a belief.
+
+## Functions
+
+### `evaluate_design` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/doe/evaluate.py#L134" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+```python
+evaluate_design(model: Model, design: Dataset, noise: NoiseModel | float) -> DesignReport
+```
+
+
+Scores a design by its expected per-parameter posterior shrinkage.
+
+For each draw ``theta_i`` from the free parameters' priors, the data are
+summarised by the Gaussian likelihood of ``log(theta)`` with precision
+``F(theta_i)``, centred where a noisy dataset would put it. That likelihood
+is combined with the *exact* prior by importance sampling from a proposal
+centred on the draw's Laplace posterior, and the posterior sd is the
+weighted sd of those samples (see ``_proposal_sd``). Averaged over the
+draws, this is the expected posterior sd after the experiment. The
+proposal follows the posterior, so the ESS does not fall as designs
+improve; weighting prior samples instead, it did, and the sd came out
+optimistic.
+
+This report is not the search criterion. ``optimize_design`` searches on
+the Laplace posterior ``inv(F + inv(Sigma_0))``, which replaces a Uniform
+prior with a Gaussian of the same log variance. That Gaussian is wrong in
+both directions: it adds curvature the box does not have, and it ignores
+the box's edges, which cut a ridge short near a corner. Laplace sds are
+then off either way, by 3x in the worst cell. It still ranks designs
+correctly and is cheap and smooth. Checked against NUTS on the
+bi-substrate model (Uniform priors, 4 designs x 7 truths):
+
+============================== ============ ==========
+predicted / NUTS               Laplace      reweighted
+============================== ============ ==========
+posterior sd ratio, 10-90%     0.81-1.55    0.84-1.12
+bias in worst-parameter e      +0.036       +0.030
+rank of designs, Spearman      0.97         0.94
+============================== ============ ==========
+
+A search on the reweighted criterion landed in the same basin, and the
+two designs tied under NUTS (-0.003 +- 0.007 worst-parameter e).
+
+With a ``belief`` (posterior samples from an earlier round), the draws are a
+bootstrap resample of those samples and the weights run over all of them,
+so correlations the earlier data left (a ridge between two parameters) are
+kept. The efficiency is then relative to the belief. A belief has samples
+but no density, so its samples are the candidates themselves (see
+``_reweighted_sd``); they are far fewer than a proposal's, so check
+``ess_min``. Longer chains raise it.
+
+**Args:**
+- `model`: Model whose free parameters (``constant=False``) all carry a prior
+with strictly positive support, e.g. ``Uniform(low > 0)``.
+- `design`: Dataset of initial-condition-only measurements, one per arm.
+- `noise`: Observation noise model; a bare float means ``Homoskedastic``.
+- `key`: PRNG key for the prior draws. The draws are the ones
+``optimize_design``'s Laplace score uses for the same key.
+- `n_draws`: Number of prior draws to average over.
+- `config`: Solver configuration, see ``fisher_information``.
+- `belief`: ``name -> samples`` in natural units, e.g.
+``run_mcmc(...).get_samples()``\: one 1-D array per free parameter,
+all the same length. Other keys (``sigma``, constant parameters)
+are ignored. None scores against the model's priors.
+
+**Returns:**
+- A ``DesignReport``. Its numbers are NaN if no draw solved.
+
+**Raises:**
+- `ValueError`: If ``belief`` is None and a free parameter has no prior or
+its prior allows values that are not strictly positive, or if
+``belief`` misses a free parameter or holds samples that are not
+1-D, positive and finite, or too few of them.
+
+
+## Classes
+
+### `DesignReport` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/doe/evaluate.py#L66" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+
+
+How much a design is expected to shrink each parameter's uncertainty.
+
+All numbers are in log space, from the reweighted posterior sd of
+``evaluate_design``. Efficiency ``e_j = 1 - sd_post_j / sd_prior_j``: 0
+means the design adds nothing to the prior, 1 means the parameter is pinned
+exactly. It can come out slightly below 0 for a design that teaches almost
+nothing: the posterior sd is an average over possible datasets, and some
+push the posterior against a bound of a Uniform prior. With a ``belief``,
+"prior" is that belief: efficiency is the shrinkage beyond what earlier
+rounds already taught, not beyond the model's priors.
+
+``print(report)`` gives one line per parameter, e.g.
+``kcat  ±21% (×/÷1.23)  prior ±38%  efficiency 0.44``.
+
+**Attributes:**
+- `efficiency`: Mean efficiency per free parameter over valid draws;
+``1 - relative_sd[j] / prior_relative_sd[j]`` up to rounding.
+- `relative_sd`: Expected posterior sd of ``log(theta_j)`` after the
+experiment, mean over valid draws. 0.21 reads as about ±21% at one
+sd, or ×/÷ ``exp(0.21)`` = 1.23.
+- `prior_relative_sd`: Sd of ``log(theta_j)`` under the priors or the
+belief.
+- `maximin`: Mean over valid draws of the worst parameter's efficiency,
+``mean_i min_j e_ij``.
+- `n_valid`: Number of draws whose simulations all solved.
+- `ess_min`: Smallest effective sample size of the importance weights
+over valid draws.
+- `ess_median`: Median effective sample size over valid draws. The
+weighted sd of a draw has a relative Monte Carlo error of about
+``1 / sqrt(2 * ESS)``\: 7% at 100, 22% at 10. With a small ESS
+the sd is also biased low, i.e. optimistic. Under priors the
+samples follow each draw's posterior, so the ESS does not fall
+with design quality\: it is at most about 0.72 of the 65536
+samples at 4 parameters, and in the worst case about that of
+prior sampling with 3277 samples (see ``_proposal_sd``). With a
+``belief`` the samples are the belief's, so a design far more
+informative than the belief lowers it; judge it here.
+- `n_draws`: Number of draws from the priors or the belief.
+- `parameter_order`: Names of the free parameters.
+

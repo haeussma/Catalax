@@ -11,13 +11,13 @@ sidebarTitle: rateflow
 
 **Methods:**
 
-#### `stoich_func` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L88" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `stoich_func` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L87" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 stoich_func(self, t, y, args)
 ```
 
-#### `rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L114" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L113" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 rates(self, t: jax.Array, y: jax.Array, constants: Optional[jax.Array] = None) -> jax.Array
@@ -37,7 +37,7 @@ is useful for quiver plots and MCMC surrogates.
 - Rates
 
 
-#### `reaction_rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L137" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `reaction_rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L136" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 reaction_rates(self, dataset: Dataset) -> jax.Array
@@ -52,7 +52,7 @@ Get the reaction rates of the model for a given dataset.
 - Reaction rates
 
 
-#### `get_weights_and_biases` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L154" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `get_weights_and_biases` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L153" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 get_weights_and_biases(self) -> List[jax.Array]
@@ -64,7 +64,7 @@ Get all weights and biases from the model.
 - List of weights and biases
 
 
-#### `plot_learned_rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L166" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_learned_rates` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L165" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_learned_rates(self, dataset: Dataset, model: Model, show: bool = True, save_path: str | None = None, round_stoich: bool = True) -> Figure
@@ -73,7 +73,7 @@ plot_learned_rates(self, dataset: Dataset, model: Model, show: bool = True, save
 Plot learned rates for a trained RateFlowODE.
 
 
-#### `plot_rate_grid` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L186" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
+#### `plot_rate_grid` <sup><a href="https://github.com/JR-1991/Catalax/blob/master/catalax/neural/rateflow.py#L185" target="_blank"><Icon icon="github" style="width: 14px; height: 14px;" /></a></sup>
 
 ```python
 plot_rate_grid(self, dataset: Dataset, model: Model, rate_indices: List[int] | None = None, state_identifiers: List[str] | None = None, state_pairs: List[Tuple[str | int, str | int]] | None = None, representative_time: float = 0.0, grid_resolution: int = 30, figsize_per_subplot: Tuple[int, int] = (5, 4), save_path: str | None = None, range_extension: float = 0.2, show: bool = True) -> Figure
