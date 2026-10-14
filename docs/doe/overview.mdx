@@ -209,7 +209,7 @@ kcat  ±5% (×/÷1.05)  prior ±9%  efficiency 0.41
 maximin 0.40 over 256/256 draws; ESS min 3, median 422
 ```
 
-The printed output above was produced with the earlier `noise_cv` form of the fit and will differ slightly with `noise=noise`. The "prior" column is now round 1's posterior. Its 1,000 samples (4 chains of 250) are the weighted samples themselves, so the ESS stays low here (min 3); longer chains raise it.
+The printed output above was produced with an earlier form of the fit that sampled the noise, and will differ slightly with `noise=noise`. The "prior" column is now round 1's posterior. Its 1,000 samples (4 chains of 250) are the weighted samples themselves, so the ESS stays low here (min 3); longer chains raise it.
 
 With lab data, `data` is the measured `Dataset` instead, and nothing else changes. The simulated states that are not observable (`p` and `e` here) can stay in the data: `run_mcmc` fits the observable states only, and warns that the others are unused.
 

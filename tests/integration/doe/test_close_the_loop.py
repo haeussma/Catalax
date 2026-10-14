@@ -24,7 +24,6 @@ MCMC = cmm.MCMCConfig(
     num_warmup=500,
     num_samples=1000,
     likelihood=dist.Normal,
-    noise_cv=0.1,
     verbose=0,
     max_steps=16384,
 )
@@ -104,7 +103,7 @@ def test_two_rounds_cover_the_truth_and_shrink_the_worst_parameter():
         model, spec, NOISE, times=times, key=keys[0], **SEARCH
     )
     data = _measure(model, round_1.dataset, times, keys[1])
-    fit_1 = cmm.run_mcmc(model, data, 5.0, MCMC)
+    fit_1 = cmm.run_mcmc(model, data, None, MCMC, noise=NOISE)
     mean_1, sd_1 = _log_posterior(fit_1, order)
     z = (mean_1 - log_truth) / sd_1
 
@@ -121,7 +120,7 @@ def test_two_rounds_cover_the_truth_and_shrink_the_worst_parameter():
     # prior: the posterior samples are finite and the prior would be a stand-in.
     for meas in _measure(model, round_2.dataset, times, keys[3]).measurements:
         data.add_measurement(meas)
-    fit_2 = cmm.run_mcmc(model, data, 5.0, MCMC)
+    fit_2 = cmm.run_mcmc(model, data, None, MCMC, noise=NOISE)
     _, sd_2 = _log_posterior(fit_2, order)
 
     merged = ctx.Dataset.from_model(model)
@@ -138,7 +137,7 @@ def test_two_rounds_cover_the_truth_and_shrink_the_worst_parameter():
         f"z(truth) round 1 {np.round(z, 2)}\n"
         f"posterior log sd / prior log sd: round 1 {np.round(sd_1 / prior_sd, 3)}, "
         f"round 1+2 {np.round(sd_2 / prior_sd, 3)}\n"
-        f"Laplace/NUTS sd at the truth (NUTS infers the noise): "
+        f"Laplace/NUTS sd at the truth (NUTS with the design's noise): "
         f"round 1 {np.round(ratio_1, 2)}, round 1+2 {np.round(ratio_2, 2)}"
     )
     assert np.all(np.abs(z) < 3), dict(zip(order, np.asarray(z)))

@@ -187,7 +187,7 @@ results = cmc.HMC(num_warmup=1000, num_samples=2000, likelihood=dist.Normal).run
 
 A prior on `floor` must keep its density away from 0 (for example `LogNormal`, not `Uniform(0, ·)`): where the data equal the prediction (e.g. a product at 0 at t = 0) the likelihood grows like 1/floor.
 
-`noise` is always a standard deviation in data units; it is converted to the scale of the likelihood family (`Normal`, `SoftLaplace` and `Laplace` are supported). For a model that is linear in its parameter, with a flat prior, fixed noise and `likelihood=dist.Normal`, the posterior mean and standard deviation equal the weighted least-squares estimate and standard error. The older `HMC(noise_cv=...)` is deprecated in favour of `Proportional` and cannot be combined with `noise`.
+`noise` is always a standard deviation in data units; it is converted to the scale of the likelihood family (`Normal`, `SoftLaplace` and `Laplace` are supported). For a model that is linear in its parameter, with a flat prior, fixed noise and `likelihood=dist.Normal`, the posterior mean and standard deviation equal the weighted least-squares estimate and standard error.
 
 ### Step 4: Results Analysis and Diagnostics
 

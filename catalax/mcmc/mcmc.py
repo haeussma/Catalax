@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import inspect
 import math
-import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -63,10 +62,6 @@ class MCMCConfig:
         max_steps: Maximum solver steps per solve (default: 4096, SimulationConfig's default,
             which every fit effectively used while the value was mis-routed into t1). Large
             values are compiled into the adjoint's checkpoint schedule and blow up compile time.
-        noise_cv: If set, the observation noise is heteroscedastic,
-            sd_i = sqrt(sigma^2 + (cv * yhat_i)^2), with `sigma` the additive floor
-            (sampled as before) and `cv` a sampled proportional term with prior
-            HalfNormal(noise_cv). None (default) keeps the constant-sigma model.
         rtol, atol: ODE solver tolerances (default 1e-5). Tighten them when the fitted
             noise scale gets close to the solver error: the likelihood then becomes
             rough, NUTS's energy error is dominated by solver noise, and dual averaging
@@ -89,7 +84,6 @@ class MCMCConfig:
     verbose: int = 1
     max_steps: int = 4096
     solver: Type[diffrax.AbstractSolver] = diffrax.Tsit5
-    noise_cv: Optional[float] = None
     rtol: float = 1e-5
     atol: float = 1e-5
 
@@ -159,7 +153,6 @@ class HMC:
         verbose: int = 1,
         max_steps: int = 4096,
         solver: Type[diffrax.AbstractSolver] = diffrax.Tsit5,
-        noise_cv: Optional[float] = None,
         rtol: float = 1e-5,
         atol: float = 1e-5,
     ):
@@ -180,16 +173,7 @@ class HMC:
             verbose: Verbosity level; 0 for silent, 1 for progress
             max_steps: Maximum number of integration steps
             solver: Solver to use for simulation
-            noise_cv: Deprecated, use ``noise=Proportional(...)`` in ``run``. Prior scale of
-                a proportional noise term (see MCMCConfig); None keeps the constant-sigma model
         """
-        if noise_cv is not None:
-            warnings.warn(
-                "noise_cv is deprecated; pass noise=catalax.noise.Proportional(cv=..., floor=...) "
-                "to HMC.run, with priors as fields to sample them.",
-                FutureWarning,  # DeprecationWarning raised in library code is hidden by default
-                stacklevel=2,
-            )
         self.config = MCMCConfig(
             num_warmup=num_warmup,
             num_samples=num_samples,
@@ -204,7 +188,6 @@ class HMC:
             seed=seed,
             verbose=verbose,
             max_steps=max_steps,
-            noise_cv=noise_cv,
             rtol=rtol,
             atol=atol,
         )
@@ -253,8 +236,6 @@ class HMC:
         if noise is not None:
             if yerrs is not None:
                 raise ValueError("Give either yerrs or noise, not both.")
-            if self.config.noise_cv is not None:
-                raise ValueError("Give either noise or noise_cv, not both.")
             if surrogate is not None:
                 raise ValueError("noise is not supported with a surrogate model.")
             if self.config.likelihood not in SD_TO_SCALE:
@@ -325,7 +306,6 @@ class HMC:
             config=config,
             sigma_surr=sigma_surr,
             rate_sigma=rate_sigma,
-            noise_cv=self.config.noise_cv,
             noise=noise,  # type: ignore
             noise_factor=noise_factor,
         )
@@ -372,7 +352,6 @@ class HMC:
             max_steps=config.max_steps,
             dt0=config.dt0,
             solver=config.solver,
-            noise_cv=config.noise_cv,
             rtol=config.rtol,
             atol=config.atol,
         )
@@ -399,7 +378,6 @@ class BayesianModel:
         rate_sigma: Optional[Array] = None,
         pre_model: Optional[PreModel] = None,
         post_model: Optional[PostModel] = None,
-        noise_cv: Optional[float] = None,
         noise: Optional[NoiseModel] = None,
         noise_factor: float = 1.0,
     ):
@@ -431,7 +409,6 @@ class BayesianModel:
         self.dt0 = config.dt0
         self.sigma_surr = sigma_surr
         self.rate_sigma = rate_sigma
-        self.noise_cv = noise_cv
         self.noise = noise
         if noise is not None:
             clash = set(prior_fields(noise)) & set(model.parameters)
@@ -532,12 +509,6 @@ class BayesianModel:
         )  # type: ignore
 
         sigma_total = sigma_disc**2
-
-        if self.noise_cv is not None:
-            # floor + proportional: the CV term scales with the *prediction*, not the
-            # datum, so a noisy low reading is not rewarded with a smaller variance.
-            cv = numpyro.sample("cv", dist.HalfNormal(self.noise_cv))
-            sigma_total = sigma_total + (cv * states[..., self.observables]) ** 2
 
         if self.sigma_surr is not None:
             sigma_total = self.sigma_surr[..., self.observables] ** 2 + sigma_total

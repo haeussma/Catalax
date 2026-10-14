@@ -106,8 +106,6 @@ def test_unknown_family_and_conflicts_raise():
     data = model.simulate(data, ctx.SimulationConfig(t1=1.0), saveat=data.to_time_matrix())
     with pytest.raises(ValueError, match="likelihood"):
         cmm.HMC(num_warmup=1, num_samples=1, likelihood=dist.Cauchy, verbose=0).run(model, data, noise=0.1)
-    with pytest.raises(ValueError, match="noise_cv"):
-        cmm.HMC(num_warmup=1, num_samples=1, noise_cv=0.05, verbose=0).run(model, data, noise=0.1)
     with pytest.raises(ValueError, match="yerrs"):
         cmm.HMC(num_warmup=1, num_samples=1, verbose=0).run(model, data)
     with pytest.raises(ValueError, match="not both"):
@@ -158,8 +156,3 @@ def test_noise_prior_name_clash_with_a_parameter_raises():
             shapes=prep.shapes, mode=Modes.MECHANISTIC, config=config.to_simulation_config(),
             noise=_clashing_noise(),
         )
-
-
-def test_noise_cv_is_deprecated():
-    with pytest.warns(FutureWarning, match="Proportional"):
-        cmm.HMC(num_warmup=1, num_samples=1, noise_cv=0.05, verbose=0)
