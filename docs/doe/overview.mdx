@@ -164,7 +164,7 @@ Explore with 16 draws, and use more for the design you run in the lab.
 
 ## Closing the loop
 
-After round 1 has been measured, fit it with `HMC.run` and design round 2 against the posterior instead of the priors. Pass the posterior samples as `belief`. `evaluate_design` and `optimize_design` then draw $\theta$ from those samples, with a bootstrap resample. The report weights all of the samples, and the search uses their full log-space covariance as $\Sigma_0$. The correlations round 1 left in place are kept, for example a ridge between $k_\text{cat}$ and an inhibition constant. **Efficiency is then relative to the belief:** it is the shrinkage beyond what round 1 already taught, not beyond the priors. A belief has samples but no density to build a proposal from, so the report weights the belief's own samples. Its effective sample size is therefore lower (`ESS min 3` above, see below); longer chains raise it.
+After round 1 has been measured, fit it with `HMC.run` and design round 2 against the posterior instead of the priors. Pass the posterior samples as `belief`. `evaluate_design` and `optimize_design` then draw $\theta$ from those samples, with a bootstrap resample. The report weights all of the samples, and the search uses their full log-space covariance as $\Sigma_0$. The correlations round 1 left in place are kept, for example a ridge between $k_\text{cat}$ and an inhibition constant. **Efficiency is then relative to the belief:** it is the shrinkage beyond what round 1 already taught, not beyond the priors. A belief has samples but no density to build a proposal from, so the report weights the belief's own samples. Its effective sample size is therefore lower (`ESS min 38` in the example below); longer chains raise it.
 
 Until real data exists, round 1 can be simulated at the model's parameter values, with the same noise model the design was scored under. Continuing the Michaelis–Menten example:
 
@@ -204,19 +204,19 @@ fit_2 = sampler.run(model, data, noise=noise)
 ```
 
 ```text
-k_m   ±7% (×/÷1.08)  prior ±12%  efficiency 0.40
-kcat  ±5% (×/÷1.05)  prior ±9%  efficiency 0.41
-maximin 0.40 over 256/256 draws; ESS min 3, median 422
+k_m   ±7% (×/÷1.07)  prior ±10%  efficiency 0.28
+kcat  ±5% (×/÷1.05)  prior ±7%  efficiency 0.31
+maximin 0.28 over 256/256 draws; ESS min 38, median 434
 ```
 
-The printed output above was produced with an earlier form of the fit that sampled the noise, and will differ slightly with `noise=noise`. The "prior" column is now round 1's posterior. Its 1,000 samples (4 chains of 250) are the weighted samples themselves, so the ESS stays low here (min 3); longer chains raise it.
+The "prior" column is now round 1's posterior. Its 1,000 samples (4 chains of 250) are the weighted samples themselves, so the ESS stays low here (min 38); longer chains raise it.
 
-With lab data, `data` is the measured `Dataset` instead, and nothing else changes. The simulated states that are not observable (`p` and `e` here) can stay in the data: `run_mcmc` fits the observable states only, and warns that the others are unused.
+With lab data, `data` is the measured `Dataset` instead, and nothing else changes. The simulated states that are not observable (`p` and `e` here) can stay in the data: `HMC.run` fits the observable states only, and warns that the others are unused.
 
 - **Refit all the data under the original priors.** Merge the rounds with `add_measurement` and fit once more. Do not turn the last posterior into the next prior: the posterior is only known through finite samples, and any prior fitted to them is an approximation that compounds over rounds.
 - **Match the likelihood to the design's noise model.** Pass the design's noise model to the fit, `HMC.run(..., noise=<the design's noise model>)`, with `likelihood=dist.Normal`. The standard deviations are then the ones the design assumed. The default `SoftLaplace` also converts them, but its tails differ from the Gaussian the design assumes.
 - **Chains run in parallel by default** (`num_chains=4`, `chain_method="parallel"`). `import catalax` sets one CPU device per core, so nothing else is needed. Four chains of the bi-substrate model took 80 s in sequence and 30 s in parallel. To choose the count yourself, call `ctx.set_host_count(n)` right after `import catalax`, before simulating or fitting; the order of imports does not matter. Called later, it raises.
-- **`constant=True` parameters** are held at their `value` by `catalax.doe`, but `run_mcmc` still samples them from their priors. Their posterior samples are ignored by `belief`.
+- **`constant=True` parameters** are held at their `value` by `catalax.doe`, but `HMC.run` still samples them from their priors. Their posterior samples are ignored by `belief`.
 - **Simulated data cannot detect a wrong rate law.** The data come from the model being fitted, so the fit is always consistent with it. Checking the mechanism needs real data.
 - **Rounds are not free.** In progress-doe, where this module was developed, greedy round-by-round designs lost to one joint design with the same total number of arms. The loop pays off when the prior turns out to be wrong, not by default.
 
@@ -251,7 +251,7 @@ What the report does not cover:
 
 ## Requirements on priors
 
-`evaluate_design` draws the free parameters from their own `prior`, the same priors `run_mcmc` uses. Every free parameter needs one, and because the design is scored in log parameters the prior must only allow strictly positive values:
+`evaluate_design` draws the free parameters from their own `prior`, the same priors `HMC.run` uses. Every free parameter needs one, and because the design is scored in log parameters the prior must only allow strictly positive values:
 
 - `Uniform(low, high)` with `low > 0`: fine, and the common case
 - `LogNormal`, `LogUniform`, and `TruncatedNormal` with `low > 0`: fine
