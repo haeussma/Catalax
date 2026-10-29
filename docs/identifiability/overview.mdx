@@ -1,0 +1,219 @@
+---
+title: "Identifiability"
+---
+
+Before fitting a model it is worth asking whether its parameters can be determined at all. A posterior that stays as wide as the prior has two possible causes: the data are too noisy or too few, or no data from this experiment could ever tell the parameters apart. Sampling longer, or measuring more precisely, only helps with the first. `catalax.identifiability` checks for the second. Given the model, what is measured and when, and the initial conditions, it tells you whether noise-free data would pin down every free parameter, and if not, which combinations of parameters stay undetermined.
+
+## What the module computes
+
+### The rank of the log sensitivities
+
+For the free parameters $\theta$ (all parameters with `constant=False`), `check` computes the sensitivities of every observable state at every sampling time of every arm with respect to $\log\theta$, the same sensitivities [`catalax.doe`](/doe/overview) builds its Fisher information from. Stacked, they form one matrix $J$ with a row per measured point and a column per parameter. Each observable is divided by its largest value, so the result does not depend on units.
+
+If two parameter directions change the measurements in the same way, $J$ loses rank: a step along
+
+$$
+v \quad\text{with}\quad J v = 0
+$$
+
+changes no measured value, and noise-free data cannot see it. `check` takes the singular value decomposition of $J$ and counts the singular values above `rtol` (default $10^{-6}$) times the largest. **Full rank means the parameters are locally identifiable.** Otherwise, the right singular vectors of the missing singular values are the **flat directions**, the combinations of $\log\theta$ the data cannot resolve.
+
+### Why a few prior draws suffice
+
+$J$ depends on $\theta$, but its rank almost never does: if $J$ has full rank at one parameter point, it has full rank at almost every point. `check` therefore draws `n_draws` (default 8) parameter vectors from the priors and reports the draw with the best conditioning. More draws only guard against an unlucky draw on the rare special points where rank drops.
+
+### Noise plays no part
+
+Measurement noise rescales the rows of $J$ and cannot change its rank. Whether a model is identifiable depends only on the model, the observables, the initial conditions and the sampling times. How precise the measurements must be is a different question, answered by [`catalax.doe`](/doe/overview).
+
+## Usage
+
+The examples use a two-substrate Michaelis–Menten model in which only the product is measured:
+
+$$
+v = \frac{k_\text{cat}\, E\, A\, B}{(K_{m,A} + A)(K_{m,B} + B)}
+$$
+
+A design is an ordinary `Dataset` holding one initial-condition-only measurement per arm, as in `catalax.doe`. The `time` argument of `add_initial` sets the sampling times.
+
+```python
+import jax
+import catalax as ctx
+import catalax.identifiability as cid
+import catalax.mcmc as cmc
+
+ctx.enable_x64()  # singular values span many orders of magnitude
+
+rate = "kcat * E * A * B / ((km_a + A) * (km_b + B))"
+
+model = ctx.Model(name="Two-substrate Michaelis-Menten")
+model.add_state("A, B, P")
+model.add_constant("E")
+model.add_ode("A", f"-({rate})", observable=False)
+model.add_ode("B", f"-({rate})", observable=False)
+model.add_ode("P", rate, observable=True)
+
+model.parameters["kcat"].prior = cmc.priors.Uniform(low=2.0, high=50.0)
+model.parameters["km_a"].prior = cmc.priors.Uniform(low=0.1, high=5.0)
+model.parameters["km_b"].prior = cmc.priors.Uniform(low=0.1, high=5.0)
+
+times = [1.0, 2.0, 5.0, 10.0, 20.0, 40.0, 60.0]
+key = jax.random.PRNGKey(0)
+
+design = ctx.Dataset.from_model(model)
+design.add_initial(time=times, A=1.0, B=2.0, P=0.0, E=0.1)
+
+report = cid.check(model, design=design, key=key)
+print(report)
+```
+
+```text
+identifiable with 1 arm: rank 3/3, condition number 2.7e+03 (8/8 draws solved)
+```
+
+A single progress curve of the product determines $k_\text{cat}$, $K_{m,A}$ and $K_{m,B}$ in principle: as $A$ and $B$ are used up, the rate passes through regimes where each parameter matters differently. The parameters need priors but no values: `check` draws them from the priors. The numbers are also fields of the report: `report.identifiable`, `report.rank`, `report.parameter_order`, `report.condition_number` and `report.null_directions`.
+
+`check` also writes its verdict to each free parameter, so it travels with the model:
+
+```python
+for name in report.parameter_order:
+    print(name, model.parameters[name].identifiability.result)
+```
+
+```text
+kcat identifiable
+km_a identifiable
+km_b identifiable
+```
+
+`model.parameters[name].identifiability.method` records how the verdict was reached (`"local rank of log sensitivities"`).
+
+### How many arms are needed
+
+Instead of a design, give a **spec**, the same box of initial conditions `catalax.doe.optimize_design` takes: every state and constant maps to a range `(low, high)`, and `low == high` fixes it. `check` then tries 1, 2, … up to `max_arms` (default 5) arms with random initial conditions inside the box and stops at the first that reaches full rank:
+
+```python
+spec = {
+    "A": (0.1, 10.0),
+    "B": (0.1, 10.0),
+    "P": (0.0, 0.0),  # no product at the start
+    "E": (0.1, 0.1),  # one enzyme concentration
+}
+
+report = cid.check(model, spec=spec, times=times, key=key)
+print(report)
+```
+
+```text
+identifiable with 1 arm: rank 3/3, condition number 6.6e+02 (8/8 draws solved)
+```
+
+`report.n_arms` is the smallest number of arms that reached full rank. Random arms are the best case: initial conditions drawn at random avoid every special coincidence. A hand-made design with that many arms can still fall short, for example when it never varies an inhibitor, so check the design you will run with `design=` as well.
+
+The rank answers whether the parameters can be resolved, not how well. A condition number of $10^3$ means some parameter direction changes the measurements a thousand times less than another: identifiable in principle, hard in practice. One arm is the minimum here, not a recommendation. How many arms and how much precision a useful fit needs is what [`evaluate_design` and `optimize_design`](/doe/overview) answer.
+
+## When the parameters cannot be resolved
+
+Suppose the enzyme concentration is not known and is fitted as a parameter $E$ alongside the others:
+
+```python
+unknown_e = ctx.Model(name="Two-substrate Michaelis-Menten, unknown enzyme")
+unknown_e.add_state("A, B, P")
+unknown_e.add_ode("A", f"-({rate})", observable=False)
+unknown_e.add_ode("B", f"-({rate})", observable=False)
+unknown_e.add_ode("P", rate, observable=True)
+for name, (low, high) in {
+    "kcat": (2.0, 50.0),
+    "km_a": (0.1, 5.0),
+    "km_b": (0.1, 5.0),
+    "E": (0.01, 1.0),
+}.items():
+    unknown_e.parameters[name].prior = cmc.priors.Uniform(low=low, high=high)
+
+spec_e = {"A": (0.1, 10.0), "B": (0.1, 10.0), "P": (0.0, 0.0)}
+report = cid.check(unknown_e, spec=spec_e, times=times, key=key)
+print(report)
+for name in report.parameter_order:
+    print(name, unknown_e.parameters[name].identifiability.result)
+```
+
+```text
+NOT identifiable with 5 arms: rank 3/4, condition number 2.3e+13 (8/8 draws solved)
+  flat direction (log): -0.71 E  +0.71 kcat
+E not identifiable
+kcat not identifiable
+km_a identifiable
+km_b identifiable
+```
+
+No number of arms helps. The flat direction reads: raising $\log k_\text{cat}$ by some amount and lowering $\log E$ by the same amount leaves every measurement unchanged. Only the product $k_\text{cat} E$ is determined. The flat direction tells you what to change: measure $E$ and enter it as a constant, as in the first model, or fit $V_\text{max} = k_\text{cat} E$ as one parameter. HMC on this model would give a posterior ridge along $k_\text{cat} E = \text{const}$, shaped by nothing but the priors.
+
+To read a flat direction, look at the signs. Opposite signs, as here, mean the data fix the **product** of the two parameters; equal signs mean they fix the **ratio**. A parameter whose loading in a flat direction exceeds 0.1 is reported as not identifiable.
+
+### The sampling times matter
+
+The rank can be no larger than the number of measured points. Measuring the product once, at the end:
+
+```python
+late_only = ctx.Dataset.from_model(model)
+late_only.add_initial(time=[60.0], A=1.0, B=2.0, P=0.0, E=0.1)
+print(cid.check(model, design=late_only, key=key))
+```
+
+```text
+NOT identifiable with 1 arm: rank 1/3, condition number 1.0e+00 (8/8 draws solved)
+```
+
+An endpoint assay gives one number per arm. Too few sampling times can make an identifiable model look unidentifiable, so test with the times you will actually measure.
+
+## What the rank test cannot see
+
+The rank test is **local**: it asks whether the parameters are determined near a point. It cannot see a second, separate parameter vector that fits the same data. The two-substrate model has one. Prepare $A$ and $B$ at equal concentrations in every arm:
+
+```python
+equal = ctx.Dataset.from_model(model)
+for s0 in [0.5, 2.0, 8.0]:
+    equal.add_initial(time=times, A=s0, B=s0, P=0.0, E=0.1)
+print(cid.check(model, design=equal, key=key))
+```
+
+```text
+identifiable with 3 arms: rank 3/3, condition number 7.2e+01 (8/8 draws solved)
+```
+
+The rank is full, yet with $A = B$ throughout the reaction the denominator $(K_{m,A} + A)(K_{m,B} + A)$ is symmetric in $K_{m,A}$ and $K_{m,B}$. Swapping them gives the same curves:
+
+```python
+import jax.numpy as jnp
+
+config = ctx.SimulationConfig(t1=60.0)
+saveat = equal.to_time_matrix()
+
+model.parameters["kcat"].value = 10.0
+model.parameters["km_a"].value, model.parameters["km_b"].value = 0.5, 3.0
+_, y = model.simulate(equal, config, saveat=saveat, return_array=True)
+
+model.parameters["km_a"].value, model.parameters["km_b"].value = 3.0, 0.5
+_, y_swapped = model.simulate(equal, config, saveat=saveat, return_array=True)
+
+print(jnp.abs(y - y_swapped).max())
+```
+
+```text
+3.504840861978664e-11
+```
+
+Both parameter vectors are locally identifiable, so the rank test passes, but the data cannot tell which of the two is the truth. A posterior then has two separate modes, and a chain may stay in one of them. Varying $A$ and $B$ independently, as in the first design, breaks the symmetry. Signs of such a discrete ambiguity: a mechanism with symmetric steps or parallel pathways, or HMC chains that settle in different places. A global test (for example StructuralIdentifiability.jl) can prove there is none; Catalax does not include one.
+
+What the test also does not cover:
+
+- **The answer is numerical.** A rank deficiency appears as a singular value below `rtol` times the largest. The sensitivities are integrated to about $10^{-8}$, so a structurally flat direction lands far below `rtol` ($2.3 \times 10^{13}$ condition number above), and an identifiable model far above it. A condition number near $1/\text{rtol}$ is a borderline case: try more draws and sampling times before trusting either verdict.
+- **The model is assumed correct.** The test says what noise-free data from this model would determine, not whether the model describes the enzyme.
+
+## Requirements on priors
+
+`check` draws the free parameters from their own `prior`, the same priors `HMC.run` uses. Every free parameter needs one, and because sensitivities are taken in log parameters the prior must only allow strictly positive values: `Uniform` with `low > 0`, `LogNormal`, `LogUniform`, or `TruncatedNormal` with `low > 0`. Parameters marked `constant=True` are left out and enter the simulation at their `value`, which must then be set.
+
+## Solver settings and failed simulations
+
+The defaults match `catalax.doe`: tight tolerances (`rtol = atol = 1e-8`, `max_steps = 4096`), changed with `config=ctx.SimulationConfig(...)`. A draw whose simulation fails is skipped, never counted: missing measurements would look exactly like lost rank. The report states how many draws solved; if none did, `check` raises and suggests narrowing the priors, raising `max_steps` or using a stiff solver.

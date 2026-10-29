@@ -61,6 +61,13 @@
             ]
           },
           {
+            "group": "Identifiability",
+            "icon": "magnifying-glass-chart",
+            "pages": [
+              "identifiability/overview"
+            ]
+          },
+          {
             "group": "Neural ODEs",
             "icon": "brain",
             "pages": [
