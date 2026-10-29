@@ -19,6 +19,7 @@ from catalax.dataset.dataset import Dataset
 from catalax.doe.evaluate import DesignReport, _prepare_efficiency, evaluate_design
 from catalax.noise import NoiseModel
 from catalax.model.simconfig import SimulationConfig
+from catalax.tools.design_space import _latin_hypercube, _to_dataset, _validate_spec
 
 if TYPE_CHECKING:
     from catalax.model.model import Model
@@ -294,24 +295,7 @@ def _validate(
     Raises:
         ValueError: Naming the column or argument and the fix.
     """
-    missing = [name for name in names if name not in spec]
-    if missing:
-        raise ValueError(
-            f"spec has no entry for {missing}. Give every state and constant a "
-            "(low, high) range; low == high fixes it, e.g. spec['p'] = (0, 0)."
-        )
-    unknown = [name for name in spec if name not in names]
-    if unknown:
-        raise ValueError(
-            f"spec names {unknown}, which are not states or constants of the "
-            f"model ({names}). Remove them or fix the spelling."
-        )
-    for name in names:
-        low, high = spec[name]
-        if low > high:
-            raise ValueError(
-                f"spec['{name}'] = ({low}, {high}) has low > high. Swap them."
-            )
+    _validate_spec(spec, names)
     counts = {
         "n_arms": n_arms,
         "n_restarts": n_restarts,
@@ -328,36 +312,6 @@ def _validate(
             "Every column of spec is fixed (low == high), so there is nothing to "
             "optimise. Widen a range, or score the design with evaluate_design."
         )
-
-
-def _to_dataset(
-    model: Model, arms: Sequence[Mapping[str, float]], times: list[float]
-) -> Dataset:
-    """One ``add_initial`` measurement per arm, each sampled at ``times``."""
-    dataset = Dataset.from_model(model)
-    for arm in arms:
-        dataset.add_initial(time=times, **{k: float(v) for k, v in arm.items()})
-    return dataset
-
-
-def _latin_hypercube(key: jax.Array, n_points: int, n_dims: int) -> jax.Array:
-    """A Latin-hypercube sample of the unit cube, shape ``(n_points, n_dims)``.
-
-    Each dimension is cut into ``n_points`` strata and each stratum gets exactly
-    one point. Points are drawn independently, so no restart starts with two
-    identical arms: those get identical gradients forever and stay stuck at
-    about 0.25 (measured in progress-doe).
-    """
-    perm_key, jitter_key = jax.random.split(key)
-    strata = jnp.stack(
-        [
-            jax.random.permutation(k, n_points)
-            for k in jax.random.split(perm_key, n_dims)
-        ],
-        axis=-1,
-    )
-    jitter = jax.random.uniform(jitter_key, (n_points, n_dims))
-    return (strata + jitter) / n_points
 
 
 __all__ = ["DesignResult", "optimize_design"]
